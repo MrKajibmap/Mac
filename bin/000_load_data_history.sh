@@ -1,0 +1,1 @@
+/opt/sas/mcd_config/bin/start_sas.sh /opt/sas/mcd_config/macro/flow/000_load_data_history.sas 000_load_data_history

@@ -19,7 +19,7 @@
 		select *
 		from IA.ETL_PROCESS_LOG
 		where IA_STATUS_CD = "L"
-			and datepart(IA_FINISH_DTTM) = &ETL_CURRENT_DT.
+			and datepart(IA_FINISH_DTTM) = date()
 			and (SAS_START_DTTM is null or SAS_STATUS_CD="E")
 		;
 	quit;

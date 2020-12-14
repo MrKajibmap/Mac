@@ -45,6 +45,8 @@
 	
 	%let mvResource = %trim(&mpResource.);
 	
+	%M_LOG_EVENT(START, etl_ia_&mvResource.);
+	
 	%etl_archive_get(mpInArchive=etl_stg.stg_&mvResource., mpOutData=work.tmp_&mvResource., mpFullStage=No);
 	
 	data work.tmp_&mvResource.;
@@ -122,7 +124,8 @@
         mpResourceCode=&mpResource, mpVersion=&mpVersionId,
         mpProcessedBy=&STREAM_ID, mpStatus=L,
         mpNotFound=ERR, mpWhere= processed_by_job_id=&STREAM_ID);
-	
+		
+	%M_LOG_EVENT(END, etl_ia_&mvResource.);
 	%etl_job_finish;
 	
 %mend load_etl_ia;

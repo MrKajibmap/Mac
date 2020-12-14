@@ -27,6 +27,7 @@
 *
 ******************************************************************
 *  21-04-2020  Зотиков     Начальное кодирование
+*  25-08-2020  Борзунов	   Добавлена обработка для данных из ETL_IA
 ******************************************************************/
 %macro hier_pt(mpLvl=, mpIn=, mpOut=);
 
@@ -34,6 +35,11 @@
 
 	%let mvLib = %sysfunc(scan(&mpIn.,1,"."));
 	%let mvTbl = %sysfunc(scan(&mpIn.,2,"."));
+	%if %sysfunc(upcase(&mvLib.)) = ETL_IA %then %do;
+		data etl_ia_&mvTbl.;
+			set &mpIn.(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+		run;
+	%end;
 	/*
 	%if %sysfunc(count(&mvTbl.,PRODUCT)) > 0 %then %do; 
 		%let mvOutClm = product;
@@ -93,7 +99,12 @@
 		proc sql;
 			create table lvl&i. as
 			select &mClmvId., &mvClmLvl., &mvClmParentId.
-			from &mpIn.
+			%if %sysfunc(upcase(&mvLib.)) = ETL_IA %then %do;
+				from etl_ia_&mvTbl.
+			%end;
+			%else %do;
+				from &mpIn.
+			%end;
 			where &mvClmLvl. = &i;
 			;
 		quit;

@@ -31,6 +31,7 @@
 *
 ****************************************************************************
 *  24-07-2020  Борзунов     Начальное кодирование
+*  27-08-2020  Борзунов		Добавлено сохранение целевых таблиц на диск
 ****************************************************************************/
 %macro rtp_2_load_data_mastercode( mpMode=A,
 							mpInputTableScore=casuser.all_ml_scoring, 
@@ -48,22 +49,31 @@
 		lmvTabNmScore
 		lmvLibrefTrain
 		lmvTabNmTrain
+		lmvLibrefInTr 
+		lmvTabNmInTr
 		;
 			
 	%let lmvMode = &mpMode.;
+	%let etl_current_dt = %sysfunc(today());
+	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
+	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
 	%let lmvStartDateScore =%sysfunc(intnx(year,&etl_current_dt.,-1,s));
-	
+
 	%if &lmvMode. = S %then %do;
-		%let lmvStartDate = &etl_current_dt.;
-		%let lmvEndDate = %eval(%sysfunc(intnx(year,&etl_current_dt.,-1,s))-91);
+		%let lmvStartDate =%eval(%sysfunc(intnx(year,&etl_current_dt.,-1,s))-91);
+		%let lmvEndDate = &VF_HIST_END_DT_SAS.;
+		%let lmvScoreEndDate = %sysfunc(intnx(day,&VF_HIST_END_DT_SAS.,91,s));
 	%end;
 	%else %if &lmvMode = T or &lmvMode. = A %then %do;
-		%let lmvStartDate = &etl_current_dt.;
-		%let lmvEndDate = %eval(%sysfunc(intnx(year,&etl_current_dt.,-3,s))-91);
+		%let lmvStartDate = %eval(%sysfunc(intnx(year,&etl_current_dt.,-3,s))-91);
+		%let lmvEndDate = &VF_HIST_END_DT_SAS.;
+		%let lmvScoreEndDate = %sysfunc(intnx(day,&VF_HIST_END_DT_SAS.,91,s));
 	%end;
-
+	
 	%member_names (mpTable=&mpOutputTableScore, mpLibrefNameKey=lmvLibrefScore, mpMemberNameKey=lmvTabNmScore);
 	%member_names (mpTable=&mpOutputTableTrain, mpLibrefNameKey=lmvLibrefTrain, mpMemberNameKey=lmvTabNmTrain);
+	%member_names (mpTable=&mpInputTableTrain, mpLibrefNameKey=lmvLibrefInTr, mpMemberNameKey=lmvTabNmInTr);
+	
 	
 	/*Создать cas-сессию, если её нет*/
 	%if %sysfunc(SESSFOUND(casauto))  = 0 %then %do; /*set all stuff only if casauto is absent */
@@ -78,7 +88,9 @@
 		%end;
 		%if &lmvMode. = A or &lmvMode = S %then %do;
 			droptable casdata="&lmvTabNmScore." incaslib="&lmvLibrefScore." quiet;
-		%end;
+		%end;		
+		/* TEST */ 
+		droptable casdata="abt14_ml" incaslib="casuser" quiet;
 	run;
 	
 	/* Объединение наборов */
@@ -87,10 +99,10 @@
 			&mpInputTableTrain.
 		;
 	run;
-
 	/***** 1. Агрегация переменных *****/
 	proc casutil;
 		droptable casdata="mastercode_abt1_ml" incaslib="casuser" quiet;
+		droptable casdata="&lmvTabNmInTr." incaslib="&lmvLibrefInTr." quiet;
 	run;
 
 	proc fedsql sessref=casauto;
@@ -574,6 +586,7 @@
 					* 
 				from
 					casuser.mastercode_full
+				where sales_dt <= date %str(%')%sysfunc(putn(&lmvEndDate., yymmdd10.))%str(%')
 			;
 		%end;
 		%if &lmvMode. = A or &lmvMode = S %then %do;
@@ -583,19 +596,29 @@
 				from
 					casuser.mastercode_full
 				where
-					sales_dt >= date %str(%')%sysfunc(putn(&lmvStartDateScore., yymmdd10.))%str(%')
+					sales_dt > date %str(%')%sysfunc(putn(&lmvStartDateScore., yymmdd10.))%str(%') and
+				sales_dt <= date %str(%')%sysfunc(putn(&lmvScoreEndDate., yymmdd10.))%str(%')
 			;
 		%end;
-	quit;
+	quit;	
 
 	proc casutil;
-	  droptable casdata='const_feature' incaslib='casuser' quiet;
-	  %if &lmvMode. = A or &lmvMode = T %then %do;
-		promote casdata="&lmvTabNmTrain." incaslib="casuser" outcaslib="&lmvLibrefTrain.";
+	  %if &lmvMode = T %then %do;
+		 save incaslib="&lmvLibrefTrain." outcaslib="&lmvLibrefTrain." casdata="&lmvTabNmTrain." casout="&lmvTabNmTrain..sashdat" replace; 
 	  %end;
 	  %if &lmvMode. = A or &lmvMode = S %then %do;
+		promote casdata="&lmvTabNmTrain." incaslib="casuser" outcaslib="&lmvLibrefTrain."; 
 		promote casdata="&lmvTabNmScore." incaslib="casuser" outcaslib="&lmvLibrefScore.";
+		/* save incaslib="&lmvLibrefScore." outcaslib="&lmvLibrefScore." casdata="&lmvTabNmScore." casout="&lmvTabNmScore..sashdat" replace; */
 	  %end;
+	  
+	  droptable casdata='const_feature' incaslib='casuser' quiet;
+	  droptable casdata="&lmvTabNmTrain." incaslib='casuser' quiet;
+	  droptable casdata="&lmvTabNmScore." incaslib='casuser' quiet;
+	  droptable casdata='mastercode_full' incaslib='casuser' quiet;
+	  droptable casdata='all_ml' incaslib='casuser' quiet;
+	  droptable casdata="mastercode_abt1_ml" incaslib="casuser" quiet;
+	  droptable casdata='mastercode_abt2_ml' incaslib='casuser' quiet;
 	run;
 
 %mend rtp_2_load_data_mastercode;

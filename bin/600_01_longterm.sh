@@ -1,0 +1,1 @@
+/opt/sas/mcd_config/bin/start_sas.sh /opt/sas/mcd_config/macro/flow/600_01_longterm.sas 600_01_longterm

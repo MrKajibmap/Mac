@@ -26,6 +26,8 @@
 *
 ****************************************************************************
 *  24-07-2020  Борзунов     Начальное кодирование
+*  27-08-2020  Борзунов		Заменен источник данных на ETL_IA. Добавлена выгрузка на диск целевых таблиц
+*  24-09-2020  Борзунов		Добавлена промо-разметка из ПТ
 ****************************************************************************/
 %macro rtp_1_load_data_product(mpMode=A,
 					 mpOutTrain=casuser.all_ml_train,
@@ -44,21 +46,30 @@
 			
 	%let lmvMode = &mpMode.;
 	%let lmvInLib=ETL_IA;
+	%let etl_current_dt = %sysfunc(today());
+	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
 	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
 	%let lmvStartDateScore =%sysfunc(intnx(year,&etl_current_dt.,-1,s));
 
 	%if &lmvMode. = S %then %do;
 		%let lmvStartDate =%eval(%sysfunc(intnx(year,&etl_current_dt.,-1,s))-91);
-		%let lmvEndDate = &etl_current_dt.;
+		%let lmvEndDate = &VF_HIST_END_DT_SAS.;
+		%let lmvScoreEndDate = %sysfunc(intnx(day,&VF_HIST_END_DT_SAS.,91,s));
 	%end;
 	%else %if &lmvMode = T or &lmvMode. = A %then %do;
 		%let lmvStartDate = %eval(%sysfunc(intnx(year,&etl_current_dt.,-3,s))-91);
-		%let lmvEndDate = &etl_current_dt.;
+		%let lmvEndDate = &VF_HIST_END_DT_SAS.;
+		%let lmvScoreEndDate = %sysfunc(intnx(day,&VF_HIST_END_DT_SAS.,91,s));
 	%end;
 	
 	%member_names (mpTable=&mpOutTrain, mpLibrefNameKey=lmvLibrefOutTrain, mpMemberNameKey=lmvTabNmOutTrain);
 	%member_names (mpTable=&mpOutScore, mpLibrefNameKey=lmvLibrefOutScore, mpMemberNameKey=lmvTabNmOutScore);
 	
+	/* Подтягиваем данные из PROMOTOOL */
+	*%add_promotool_marks(mpIntLibref=casuser,
+							mpExtLibref=pt);
+	%add_promotool_marks_sep(mpOutCaslib=casshort,
+							mpPtCaslib=pt);
 	/****** 0. Объявление макропеременных ******/
 	options mprint nomprintnest nomlogic nomlogicnest nosymbolgen mcompilenote=all mreplace;
 	/*Создать cas-сессию, если её нет*/
@@ -79,15 +90,15 @@
 	  %end;
 	run;
 	
-	data CASUSER.product (replace=yes);
+	data CASUSER.product (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..product(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
-	data CASUSER.product_HIERARCHY (replace=yes);
+	data CASUSER.product_HIERARCHY (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..product_HIERARCHY(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
-	data CASUSER.product_ATTRIBUTES (replace=yes);
+	data CASUSER.product_ATTRIBUTES (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..product_ATTRIBUTES(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
   
@@ -152,20 +163,22 @@
 	%text_encoding(mpTable=casuser.product_dictionary_ml, mpVariable=a_price_tier);
 
 	proc casutil;
-	  promote casdata="product_dictionary_ml" incaslib="casuser" outcaslib="casuser";
+	/* TEST */
+	  *promote casdata="product_dictionary_ml" incaslib="casuser" outcaslib="casuser";
 	  droptable casdata='product' incaslib='casuser' quiet;
 	  droptable casdata='product_ATTRIBUTES' incaslib='casuser' quiet;
 	  droptable casdata='attr_transposed' incaslib='casuser' quiet;
 	run;
 
-	/* Подготовка таблицы с продажами */
+	/* Подготовка таблицы с продажами (на время перезаливки таблицы ETL_IA.PMIX_SALES данные берем напрямую из IA) */
+
 	proc casutil;
 		droptable casdata="abt1_ml" incaslib="casuser" quiet;
 	run;
 
-	data CASUSER.pmix_sales (replace=yes);
+	data CASUSER.pmix_sales(replace=yes  drop=valid_from_dttm valid_to_dttm);
 			set &lmvInLib..pmix_sales(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-			and sales_dt<=&lmvEndDate. and sales_dt>=&lmvStartDate.));
+			and sales_dt<=&lmvScoreEndDate. and sales_dt>=&lmvStartDate.));
 		run;
 
 	proc fedsql sessref=casauto; 
@@ -188,6 +201,8 @@
 				 casuser.product_dictionary_ml as t2 
 			on
 				t1.product_id = t2.product_id
+				and t1.SALES_DT >= %str(date%')%sysfunc(putn(&lmvStartDate.,yymmdd10.))%str(%') and
+				t1.SALES_DT <= %str(date%')%sysfunc(putn(&lmvScoreEndDate.,yymmdd10.))%str(%')
 		;
 		quit;
 
@@ -195,16 +210,15 @@
 		droptable casdata="pmix_sales" incaslib="casuser" quiet;
 	run;
 
-
 	/****** 2. Добавление цен ******/
 	proc casutil;
 	  droptable casdata="price_ml" incaslib="casuser" quiet;
 	  droptable casdata="abt2_ml" incaslib="casuser" quiet;
 	run;
 
-	 data CASUSER.price_ml (replace=yes);
+	 data CASUSER.price_ml (replace=yes  drop=valid_from_dttm valid_to_dttm);
 			set &lmvInLib..price(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-			and end_dt<=&lmvEndDate. and start_dt>=&lmvStartDate.));
+			and end_dt<=&lmvScoreEndDate. and start_dt>=&lmvStartDate.));
 		run;
 
 	/* Добавляем к продажам цены */
@@ -236,7 +250,6 @@
 
 	proc casutil;
 	  droptable casdata="price_ml" incaslib="casuser" quiet;
-	  droptable casdata="" incaslib="casuser" quiet;
 	  droptable casdata="price" incaslib="casuser" quiet;
 	  droptable casdata="abt1_ml" incaslib="casuser" quiet;
 	run;
@@ -248,7 +261,7 @@
 	run;
 
 	/****** 3. Протяжка временных рядов ******/
-	%let fc_end=%sysfunc(putn(&lmvEndDate,yymmdd10.));
+	%let fc_end=%sysfunc(putn(&lmvScoreEndDate,yymmdd10.));
 
 	proc cas;
 	timeData.timeSeries result =r /
@@ -282,9 +295,9 @@
 		droptable casdata="abt4_ml" incaslib="casuser" quiet;
 	run;
 
-	data CASUSER.pbo_close_period (replace=yes);
-			set &lmvInLib..pbo_close_period(where=(/*valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-				and */end_dt<=&lmvEndDate. and start_dt>=&lmvStartDate.));
+	data CASUSER.pbo_close_period (replace=yes  drop=valid_from_dttm valid_to_dttm);
+			set &lmvInLib..pbo_close_period(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
+				and end_dt<=&lmvScoreEndDate. and start_dt>=&lmvStartDate.));
 	run;
 
 	/* заполняем пропуски в end_dt */
@@ -293,8 +306,8 @@
 			select 
 				CHANNEL_CD,
 				PBO_LOCATION_ID,
-				datepart(start_dt) as start_dt,
-				coalesce(datepart(end_dt), date '2100-01-01') as end_dt,
+				start_dt as start_dt,
+				coalesce(end_dt, date '2100-01-01') as end_dt,
 				CLOSE_PERIOD_DESC
 			from
 				casuser.pbo_close_period
@@ -330,7 +343,7 @@
 		droptable casdata="closed_pbo" incaslib="casuser" quiet;
 	run;
 
-	data CASUSER.PBO_LOC_ATTRIBUTES (replace=yes);
+	data CASUSER.PBO_LOC_ATTRIBUTES (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..PBO_LOC_ATTRIBUTES(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
@@ -393,8 +406,9 @@
 				t1.GROSS_PRICE_AMT
 			from 
 				casuser.abt4_ml as t1
-			where 
-				t1.sum_qty is not missing
+			where 		
+			(t1.sum_qty is not missing and t1.SALES_DT <= %str(date%')%sysfunc(putn(&lmvScoreEndDate.,yymmdd10.))%str(%')) or
+			(t1.SALES_DT > %str(date%')%sysfunc(putn(&lmvEndDate.,yymmdd10.))%str(%'))
 		;
 	quit;
 
@@ -403,9 +417,9 @@
 		droptable casdata="assort_matrix" incaslib="casuser" quiet;
 	run;
 	
-	data CASUSER.assort_matrix (replace=yes);
+	data CASUSER.assort_matrix (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..assort_matrix(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-		and end_dt<=&lmvEndDate. and start_dt>=&lmvStartDate.));
+		/*and end_dt<=&lmvEndDate. and start_dt>=&lmvStartDate.*/));
 	run;
 		
 	proc fedsql sessref=casauto;
@@ -424,10 +438,11 @@
 			on
 				t1.PBO_LOCATION_ID = t2.PBO_LOCATION_ID and
 				t1.PRODUCT_ID = t2.PRODUCT_ID and
-				t1.SALES_DT <= datepart(t2.end_dt) and 
-				t1.SALES_DT >= datepart(t2.start_dt)
+				t1.SALES_DT <= t2.end_dt and 
+				t1.SALES_DT >= t2.start_dt
 			where	
-				t2.PBO_LOCATION_ID is not missing 
+			(t1.SALES_DT <= %str(date%')%sysfunc(putn(&lmvScoreEndDate.,yymmdd10.))%str(%')) or 
+			(t2.PBO_LOCATION_ID is not missing)
 		;
 	quit;
 	
@@ -443,10 +458,10 @@
 	
 	proc casutil;
 		droptable casdata="pbo_closed_ml" incaslib="casuser" quiet;
-		promote casdata="assort_matrix" incaslib="casuser" outcaslib="casuser";
+		*promote casdata="assort_matrix" incaslib="casuser" outcaslib="casuser";
 		droptable casdata="pbo_close_period" incaslib="casuser" quiet;
 		droptable casdata="abt3_ml" incaslib="casuser" quiet;
-		promote casdata="closed_pbo" incaslib="casuser" outcaslib="casuser"; 
+		*promote casdata="closed_pbo" incaslib="casuser" outcaslib="casuser"; 
 	run;
 
 	/****** 5. Подсчет лагов ******/
@@ -743,20 +758,23 @@
 		droptable casdata="abt_promo" incaslib="casuser" quiet;
 		droptable casdata="promo" incaslib="casuser" quiet;
 	run;
-	data CASUSER.pbo_loc_hierarchy (replace=yes);
+	data CASUSER.pbo_loc_hierarchy (replace=yes  drop=valid_from_dttm valid_to_dttm);
 			set &lmvInLib..pbo_loc_hierarchy(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
 	data CASUSER.promo (replace=yes);
-		set &lmvInLib..promo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+		/* set &lmvInLib..promo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
+		set casshort.promo_enh;
 	run;
 	
 	data CASUSER.promo_x_pbo (replace=yes);
-		set &lmvInLib..promo_x_pbo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+		/* set &lmvInLib..promo_x_pbo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
+		set casshort.promo_pbo_enh;
 	run;
 	
 	data CASUSER.promo_x_product (replace=yes);
-		set &lmvInLib..promo_x_product(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+		/* set &lmvInLib..promo_x_product(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
+		set casshort.promo_prod_enh;
 	run;
 	/* Создаем таблицу связывающую PBO на листовом уровне и на любом другом */
 	proc fedsql sessref=casauto;
@@ -878,12 +896,12 @@
 				t2.PBO_LEAF_ID,
 				t1.PROMO_NM,
 				t1.PROMO_PRICE_AMT,
-				datepart(t1.START_DT) as start_dt,
-				datepart(t1.END_DT) as end_dt,
+				t1.START_DT as start_dt,
+				t1.END_DT as end_dt,
 				t1.CHANNEL_CD,
-	/* 			t1.NP_GIFT_PRICE_AMT, */
+	 			t1.NP_GIFT_PRICE_AMT, 
 				t1.PROMO_MECHANICS,
-				/*(case
+				(case
 					when t1.PROMO_MECHANICS = 'BOGO / 1+1' then 'bogo'
 					when t1.PROMO_MECHANICS = 'Discount' then 'discount'
 					when t1.PROMO_MECHANICS = 'EVM/Set' then 'evm_set'
@@ -892,8 +910,9 @@
 					when t1.PROMO_MECHANICS = 'Product Gift' then 'product_gift'
 					when t1.PROMO_MECHANICS = 'Other: Discount for volume' then 'other_promo'
 					when t1.PROMO_MECHANICS = 'NP Promo Support' then 'support'
-				end) as promo_mechanics_name,*/
-				(case
+					/* TEMP  else 'other_promo' */
+				end) as promo_mechanics_name,
+				/* (case
 					when t1.PROMO_MECHANICS = 'BOG' then 'bogo'
 					when t1.PROMO_MECHANICS = 'Dis' then 'discount'
 					when t1.PROMO_MECHANICS = 'EVM' then 'evm_set'
@@ -901,9 +920,9 @@
 					when t1.PROMO_MECHANICS = 'Pai' then 'pairs'
 					when t1.PROMO_MECHANICS = 'Pro' then 'product_gift'
 					when t1.PROMO_MECHANICS = 'Oth' then 'other_promo'
-					when t1.PROMO_MECHANICS = 'Gen ' then 'support'
+					when t1.PROMO_MECHANICS = 'NP ' then 'support'
 					else 'other_promo'
-				end) as promo_mechanics_name,
+				end) as promo_mechanics_name, */
 				1 as promo_flag		
 			from
 				casuser.promo as t1 
@@ -963,8 +982,8 @@
 				t1.PRODUCT_ID,
 				t1.CHANNEL_CD,
 				t1.SALES_DT,
-				/* max(coalesce(t2.other_promo, 0)) as other_promo,  */
-				0 as other_promo,
+				max(coalesce(t2.other_promo, 0)) as other_promo,  
+				/* 0 as other_promo, */
 				max(coalesce(t2.support, 0)) as support,
 				max(coalesce(t2.bogo, 0)) as bogo,
 				max(coalesce(t2.discount, 0)) as discount,
@@ -1076,7 +1095,7 @@
 	  droptable casdata="abt7_ml" incaslib="casuser" quiet;
 	  run;
 
-		data CASUSER.macro (replace=yes);
+		data CASUSER.macro (replace=yes  drop=valid_from_dttm valid_to_dttm);
 			set &lmvInLib..macro_factor(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 		run;
 
@@ -1168,7 +1187,7 @@
 	quit;
 
 	proc casutil;
-	  promote casdata="macro_transposed_ml" incaslib="casuser" outcaslib="casuser";
+	  *promote casdata="macro_transposed_ml" incaslib="casuser" outcaslib="casuser";
 	  droptable casdata="macro2_ml" incaslib="casuser" quiet;
 	  droptable casdata="macro" incaslib="casuser" quiet;
 	  droptable casdata="macro_ml" incaslib="casuser" quiet;
@@ -1182,7 +1201,7 @@
 	  droptable casdata = "weather" incaslib = "casuser" quiet;
 	run;
 
-	data CASUSER.weather (replace=yes);
+	data CASUSER.weather (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..weather(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 
@@ -1257,7 +1276,7 @@
 		droptable casdata="abt9_ml" incaslib="casuser" quiet;
 	run;
 
-	data CASUSER.comp_media (replace=yes);
+	data CASUSER.comp_media (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..comp_media(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 
@@ -1382,10 +1401,12 @@
 	proc casutil;
 	  droptable casdata="media_ml" incaslib="casuser" quiet;
 	  droptable casdata="abt10_ml" incaslib="casuser" quiet;
+	  droptable casdata="promo_ml_trp_expand" incaslib="casuser" quiet;
 	run;
 
 	data CASUSER.media (replace=yes);
-		set &lmvInLib..media(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+		/* set &lmvInLib..media(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
+		set casshort.media_enh;
 	run;
 
 	proc fedsql sessref=casauto;
@@ -1397,7 +1418,7 @@
 				t1.PROMO_NM,
 				t1.START_DT,
 				t1.END_DT,
-				datepart(t4.REPORT_DT) as report_dt,
+				t4.report_dt,
 				t4.TRP
 			from
 				casuser.promo as t1 
@@ -1413,6 +1434,8 @@
 				casuser.media as t4
 			on
 				t1.PROMO_GROUP_ID = t4.PROMO_GROUP_ID
+				and t4.report_dt <= t1.end_dt
+				and t4.report_dt >= t1.start_dt
 		;
 	quit;
 
@@ -1591,9 +1614,10 @@
 	/******	12. Добавим атрибуты ПБО ******/
 	proc casutil;
 	  droptable casdata="abt12_ml" incaslib="casuser" quiet;
+	  droptable casdata="pbo_dictionary_ml" incaslib="casuser" quiet;
 	run;
 	
-	data CASUSER.pbo_location (replace=yes);
+	data CASUSER.pbo_location (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..pbo_location(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 
@@ -1724,12 +1748,13 @@
 	quit;
 
 	proc casutil;
-	  droptable casdata='pbo_location' incaslib='casuser' quiet;
-	  droptable casdata='pbo_loc_attributes' incaslib='casuser' quiet;
-	  droptable casdata='pbo_hier_flat' incaslib='casuser' quiet;
-	  droptable casdata='attr_transposed' incaslib='casuser' quiet;
-	  droptable casdata='pbo_dictionary_ml' incaslib='casuser' quiet;
-	  droptable casdata="abt11_ml" incaslib="casuser" quiet;
+		promote casdata="pbo_dictionary_ml" incaslib="casuser" outcaslib="casuser";
+		droptable casdata='pbo_location' incaslib='casuser' quiet;
+		droptable casdata='pbo_loc_attributes' incaslib='casuser' quiet;
+		droptable casdata='pbo_hier_flat' incaslib='casuser' quiet;
+		droptable casdata='attr_transposed' incaslib='casuser' quiet;
+		/*droptable casdata='pbo_dictionary_ml' incaslib='casuser' quiet;*/
+		droptable casdata="abt11_ml" incaslib="casuser" quiet;
 	run;
 
 	/****** 13. Добавляем календарные признаки *******/
@@ -1739,7 +1764,7 @@
 
 	data work.cldr_prep;
 		retain date &lmvStartDate;
-		do while(date <= &lmvEndDate);
+		do while(date <= &lmvScoreEndDate);
 			output;
 			date + 1;		
 		end;
@@ -2136,6 +2161,7 @@
 				t1.pbo_location_id = t2.pbo_location_id and
 				t1.PROD_LVL3_ID = t2.PROD_LVL3_ID and
 				t1.sales_dt = t2.sales_dt
+			where GROSS_PRICE_AMT is not null
 		;
 	quit;
 
@@ -2234,7 +2260,7 @@
 				t1.sales_dt = t2.sales_dt
 		;
 	quit;
-
+		
 	proc casutil;
 		droptable casdata="unique_day_price" incaslib="casuser" quiet;
 		droptable casdata="sum_count_price" incaslib="casuser" quiet;
@@ -2253,7 +2279,7 @@
 	%text_encoding(mpTable=casuser.abt15_ml, mpVariable=channel_cd);
 
 	/* Заменяем текстовое поле на числовое */
-	proc fedsql sessref = casauto;
+	/*proc fedsql sessref = casauto;
 		create table casuser.abt16_ml{options replace=true} as 
 			select
 				t1.PBO_LOCATION_ID,
@@ -2340,33 +2366,208 @@
 			from
 				casuser.abt15_ml as t1
 		;
+	quit;*/
+	proc fedsql sessref = casauto;
+		create table casuser.abt16_ml{options replace=true} as 
+			select
+				t1.PBO_LOCATION_ID,
+				t1.PRODUCT_ID,
+				t1.CHANNEL_CD_id as channel_cd,
+				t1.SALES_DT,
+				t1.sum_qty,
+				t1.GROSS_PRICE_AMT,
+				t1.lag_halfyear_avg,
+				t1.lag_halfyear_med,
+				t1.lag_month_avg,
+				t1.lag_month_med,
+				t1.lag_qtr_avg,
+				t1.lag_qtr_med,
+				t1.lag_week_avg,
+				t1.lag_week_med,
+				t1.lag_year_avg,
+				t1.lag_year_med,
+				t1.lag_halfyear_std,
+				t1.lag_month_std,
+				t1.lag_qtr_std,
+				t1.lag_week_std,
+				t1.lag_year_std,
+				t1.lag_halfyear_pct10,		 
+				t1.lag_halfyear_pct90,		 
+				t1.lag_month_pct10,
+				t1.lag_month_pct90,
+				t1.lag_qtr_pct10,	
+				t1.lag_qtr_pct90,	
+				t1.lag_week_pct10,	
+				t1.lag_week_pct90,	
+				t1.lag_year_pct10,	
+				t1.lag_year_pct90,
+				t1.other_promo,  
+				t1.support,
+				t1.bogo,
+				t1.discount,
+				t1.evm_set,
+				t1.non_product_gift,
+				t1.pairs,
+				t1.product_gift,
+				t1.side_promo_flag,
+				t1.A_CPI,
+				t1.A_GPD,
+				t1.A_RDI,
+				t1.TEMPERATURE,
+				t1.PRECIPITATION,
+				t1.comp_trp_BK,
+				t1.comp_trp_KFC,
+				t1.sum_trp,
+				t1.prod_lvl4_id, 
+				t1.prod_lvl3_id,
+				t1.prod_lvl2_id,
+				t1.hero,
+				t1.item_size,
+				t1.offer_type,
+				t1.price_tier,
+				t1.lvl3_id,
+				t1.lvl2_id,
+				t1.agreement_type,
+				t1.breakfast,
+				t1.building_type,
+				t1.company,
+				t1.delivery,
+				t1.drive_thru,
+				t1.mccafe_type,
+				t1.price_level,
+				t1.window_type,
+				t1.week,
+				t1.weekday,
+				t1.month,
+				t1.weekend_flag,
+				t1.defender_day,
+				t1.female_day,
+				t1.may_holiday,
+				t1.new_year,
+				t1.russia_day,
+				t1.school_start,
+				t1.student_day,
+				t1.summer_start,
+				t1.valentine_day, 
+				max(t1.price_rank) as price_rank,
+				max(t1.price_index) as price_index
+			from
+				casuser.abt15_ml as t1
+			group by 
+				t1.PBO_LOCATION_ID,
+				t1.PRODUCT_ID,
+				t1.CHANNEL_CD_id,
+				t1.SALES_DT,
+				t1.sum_qty,
+				t1.GROSS_PRICE_AMT,
+				t1.lag_halfyear_avg,
+				t1.lag_halfyear_med,
+				t1.lag_month_avg,
+				t1.lag_month_med,
+				t1.lag_qtr_avg,
+				t1.lag_qtr_med,
+				t1.lag_week_avg,
+				t1.lag_week_med,
+				t1.lag_year_avg,
+				t1.lag_year_med,
+				t1.lag_halfyear_std,
+				t1.lag_month_std,
+				t1.lag_qtr_std,
+				t1.lag_week_std,
+				t1.lag_year_std,
+				t1.lag_halfyear_pct10,		 
+				t1.lag_halfyear_pct90,		 
+				t1.lag_month_pct10,
+				t1.lag_month_pct90,
+				t1.lag_qtr_pct10,	
+				t1.lag_qtr_pct90,	
+				t1.lag_week_pct10,	
+				t1.lag_week_pct90,	
+				t1.lag_year_pct10,	
+				t1.lag_year_pct90,
+				t1.other_promo,  
+				t1.support,
+				t1.bogo,
+				t1.discount,
+				t1.evm_set,
+				t1.non_product_gift,
+				t1.pairs,
+				t1.product_gift,
+				t1.side_promo_flag,
+				t1.A_CPI,
+				t1.A_GPD,
+				t1.A_RDI,
+				t1.TEMPERATURE,
+				t1.PRECIPITATION,
+				t1.comp_trp_BK,
+				t1.comp_trp_KFC,
+				t1.sum_trp,
+				t1.prod_lvl4_id, 
+				t1.prod_lvl3_id,
+				t1.prod_lvl2_id,
+				t1.hero,
+				t1.item_size,
+				t1.offer_type,
+				t1.price_tier,
+				t1.lvl3_id,
+				t1.lvl2_id,
+				t1.agreement_type,
+				t1.breakfast,
+				t1.building_type,
+				t1.company,
+				t1.delivery,
+				t1.drive_thru,
+				t1.mccafe_type,
+				t1.price_level,
+				t1.window_type,
+				t1.week,
+				t1.weekday,
+				t1.month,
+				t1.weekend_flag,
+				t1.defender_day,
+				t1.female_day,
+				t1.may_holiday,
+				t1.new_year,
+				t1.russia_day,
+				t1.school_start,
+				t1.student_day,
+				t1.summer_start,
+				t1.valentine_day;
 	quit;
 	
 	proc fedsql sessref=casauto;
 	%if &lmvMode. = A or &lmvMode = T %then %do;
 		create table casuser.&lmvTabNmOutTrain.{options replace = true} as 
 			select *
-			from casuser.abt16_ml /*забираем весь горизонт ?
-			where sales_dt <= date'2019-12-31' */
+			from casuser.abt16_ml 
+			where sales_dt <= date %str(%')%sysfunc(putn(&lmvEndDate., yymmdd10.))%str(%')
 			;
 	%end;
 	%if &lmvMode. = A or &lmvMode = S %then %do;
 		create table casuser.&lmvTabNmOutScore.{options replace = true} as 
 			select * 
 			from casuser.abt16_ml 
-			where /* Забираем лишь только 1 год + 91 день ? */
-			sales_dt > date %str(%')%sysfunc(putn(&lmvStartDateScore., yymmdd10.))%str(%') /*and
-			sales_dt <= date'2020-03-01' */
+			where sales_dt > date %str(%')%sysfunc(putn(&lmvStartDateScore., yymmdd10.))%str(%') and
+				sales_dt <= date %str(%')%sysfunc(putn(&lmvScoreEndDate., yymmdd10.))%str(%')
 		;
 	%end;
 	quit;
+
 	proc casutil;
-		%if &lmvMode. = A or &lmvMode = T %then %do;
-			promote casdata="&lmvTabNmOutTrain." incaslib="casuser" outcaslib="&lmvLibrefOutTrain.";
+		 %if &lmvMode = T %then %do; 
+			save incaslib="&lmvLibrefOutTrain." outcaslib="&lmvLibrefOutTrain." casdata="&lmvTabNmOutTrain." casout="&lmvTabNmOutTrain..sashdat" replace;
 		%end;
 		%if &lmvMode. = A or &lmvMode = S %then %do;
+			promote casdata="&lmvTabNmOutTrain." incaslib="casuser" outcaslib="&lmvLibrefOutTrain.";
 			promote casdata="&lmvTabNmOutScore." incaslib="casuser" outcaslib="&lmvLibrefOutScore.";
+			/*%if %sysfunc(upcase(&lmvLibrefOutScore)) ne CASUSER %then %do;*/
+			/*save incaslib="&lmvLibrefOutScore." outcaslib="&lmvLibrefOutScore." casdata="&lmvTabNmOutScore." casout="&lmvTabNmOutScore..sashdat" replace; */
+			/*%end;*/
 		%end;
+		droptable casdata="&lmvTabNmOutScore." incaslib="casuser" quiet;
+		droptable casdata="&lmvTabNmOutTrain." incaslib="casuser" quiet;
+		droptable casdata="abt16_ml" incaslib="casuser" quiet;
+		droptable casdata="abt15_ml" incaslib="casuser" quiet;
 	run;
 
 %mend rtp_1_load_data_product;

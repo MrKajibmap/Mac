@@ -1,0 +1,14 @@
+%macro member_exists_list(mpMemberList=work.test work.test2 work.test3);
+	%local lmvParCnt lmvMemberList lmvCommonExFlg;
+	%let lmvCommonExFlg = 0;
+	%let lmvMemberList = &mpMemberList.;
+	%let lmvParCnt = %sysfunc(countw(&lmvMemberList, %str( ) ));
+	%do i=1 %to &lmvParCnt.;
+		%let lmvCommonExFlg =%sysevalf(&lmvCommonExFlg. +  %member_exists (%scan(&lmvMemberList., &i., %str( ) )) );
+	%end;
+	%put &=lmvCommonExFlg;
+	%if &lmvCommonExFlg ne &lmvParCnt. %then %do;
+		%put ERROR: INPUT PARAMETERS ARE NOT VALID!;
+		%abort;
+	%end;
+%mend member_exists_list;

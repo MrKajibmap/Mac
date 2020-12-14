@@ -30,7 +30,7 @@
 					
 	%let etls_jobName=load_etl_stg;
 	%etl_job_start;
-	
+	%M_LOG_EVENT(START, load_etl_stg_&mpResource.);
 	%local lmvIn lmvOut lmvKeep lmvKeepComma;
 
 	proc sql noprint;
@@ -144,6 +144,7 @@
 		
 	%end;
 	
+	%M_LOG_EVENT(END, load_etl_stg_&mpResource.);
 	%etl_job_finish;
 
 %mend load_etl_stg;

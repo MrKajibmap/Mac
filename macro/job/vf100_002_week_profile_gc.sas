@@ -31,7 +31,10 @@
 	%etl_job_start;
 	
 	/* Создание модели недельного профиля для разбивки GC по дням и переагрегации недель до месяцев*/
-	%vf_train_week_profile_gc; 
+	%vf_train_week_profile_gc(mpInEventsMkup=dm_abt.events_mkup,
+									 mpNnetWp=casuser.nnet_wp1,
+									 mpPromo_W=casuser.promo_w 
+									 );
 	
 	%etl_job_finish;
 	

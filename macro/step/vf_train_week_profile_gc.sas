@@ -385,7 +385,7 @@
 	/*Store model as a permanent table*/
 	proc cas;
 			save / table={name="&lmvOutTabNameNnetWp." caslib="&lmvOutLibrefNnetWp."},
-				  name='&lmvOutTabNameNnetWp..sashdat',
+				  name="&lmvOutTabNameNnetWp..sashdat",
 					caslib="&lmvOutLibrefNnetWp.",
 				   replace=true;
 			attribute / task = 'CONVERT',

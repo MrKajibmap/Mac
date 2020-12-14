@@ -4,9 +4,9 @@
 *
 ******************************************************************
 *  НАЗНАЧЕНИЕ:
-*     Макрос для подготовки таблицы public.pbo_sal_abt, используемой. в сквозном процессе
+*     Макрос для подготовки таблицы dm_abt.pbo_sal_abt, используемой. в сквозном процессе
 *		для прогнозирования временными рядами. На основе указанной таблицы создается VF-проект, 
-*		ID которого используется при построении витрины public.pmix_sal_abt макроса 04_vf_prepare_ts_abt
+*		ID которого используется при построении витрины dm_abt.pmix_sal_abt макроса 04_vf_prepare_ts_abt
 *
 *  ПАРАМЕТРЫ:
 *     Нет
@@ -30,6 +30,7 @@
 *  02-07-2020  Борзунов     Начальное кодирование
 *  10-07-2020  Д Звежинский Убраны промо с product_id=1
 *  28-07-2020  Борзунов 	Добавлен параметры mpPboSalAbt,mpPromoW1,mpPromoD,mpPboSales,mpWeatherW
+*  06-10-2020  Д Звежинский Витрины собираются из чеков, восстановленных на периодах закрытия ПБО
 ****************************************************************************/
 %macro vf_prepare_ts_abt_pbo(mpPboSalAbt=dm_abt.pbo_sal_abt,
 							mpPromoW1=dm_abt.promo_w1,
@@ -70,17 +71,16 @@
 	proc cas;
 		timeData.timeSeries result =r /
 		series={{name="receipt_qty", Acc="sum", setmiss="missing"},
-		{name="gross_sales_amt", Acc="sum", setmiss="missing"},
-		{name="net_sales_amt", Acc="sum", setmiss="missing"}}
-		tEnd= "&VF_FC_AGG_END_DT" 
-		table={caslib="casuser",name="pbo_sales", groupby={"PBO_LOCATION_ID","CHANNEL_CD"} ,
-		where="sales_dt>=&VF_HIST_START_DT_SAS and channel_cd='ALL'"}
+	            {name="receipt_qty_rest", Acc="sum", setmiss="missing"}}
+		tEnd= "&vf_fc_agg_end_dt" 
+		table={caslib="casuser",name="pbo_sales_rest", groupby={"PBO_LOCATION_ID","CHANNEL_CD"} ,
+	       where="sales_dt>=&vf_hist_start_dt_sas"}
 		timeId="SALES_DT"
 		interval="week.2"
 		trimId="LEFT"
 		casOut={caslib="casuser",name="&lmvOutTabNameTsPboSales",replace=True}
-		;
-		run;
+	;
+	run;
 	quit;
 
 	/*1.1 Макроэкономич факторы*/
@@ -118,7 +118,7 @@
 	proc fedsql sessref=casauto noprint;
 		create table casuser.&lmvOutTabNameWeatherW{options replace=true} as
 			select PBO_LOCATION_ID
-					,intnx('week.2',PERIOD_DT,0) as period_dt
+					,intnx('week.2',datepart(PERIOD_DT),0) as period_dt
 					,sum(PRECIPITATION) as sum_prec
 					,avg(PRECIPITATION) as avg_prec
 					,sum(case when PRECIPITATION>0.1 then 1 else 0 end) as count_prec
@@ -280,7 +280,8 @@
 		create table casuser.promo_pbo_dist{options replace=true} as
 			select distinct promo_group_id
 							,promo_id
-							,pbo_location_id 
+							,pbo_location_id
+							,channel_cd 
 			from casuser.&lmvOutTabNamePromoD
 		;
 	quit;
@@ -290,12 +291,13 @@
 		create table casuser.media_ws{options replace=true} as
 			select intnx('week.2',t1.PERIOD_DT,0) as period_dt
 					,t2.pbo_location_id
+					,t2.channel_cd
 					,t2.promo_group_id
 					,avg(trp) as trp
 			from casuser.media t1 
 			inner join casuser.promo_pbo_dist t2
 				on t1.promo_group_id=t2.promo_group_id
-			group by 1,2,3
+			group by 1,2,3,4
 		;
 	quit;
 	
@@ -304,10 +306,11 @@
 		create table casuser.media_w{options replace=true} as
 			select period_dt
 					,pbo_location_id
+					,channel_cd
 					,count(distinct t1.promo_group_id) as dist_promo/*сколько разных промо-кампаний действует на пбо одноверменно*/
 					,sum(t1.trp) as sum_trp /*суммируем trp только по разным promo_group*/
 			from casuser.media_ws t1
-			group by 1,2
+			group by 1,2,3
 		;
 	quit;
 
@@ -319,7 +322,7 @@
 					,t1.PBO_LOCATION_ID
 					,case
 						when t1.sales_dt<&VF_FC_START_DT 
-						then coalesce(t1.RECEIPT_QTY,0) 
+						then coalesce(t1.RECEIPT_QTY,t1.Receipt_qty_rest,0) 
 					end as receipt_qty
 					,t2.LVL2_ID
 					,t2.LVL3_ID
@@ -355,12 +358,68 @@
 			left join casuser.media_w t7
 				on t1.sales_dt=t7.period_dt 
 				and t1.pbo_location_id=t7.pbo_location_id
-			where t1.sales_dt>=&VF_HIST_START_DT 
+				and	t1.channel_cd=t7.channel_cd
+			where t1.sales_dt>=&VF_HIST_START_DT and t1.channel_cd='ALL'
 		;
 	quit;
+
+	/*For Building Blocks*/
+	proc casutil;
+	  droptable casdata="&lmvOutTabNamePboSalAbt._dlv" incaslib="casuser" quiet;
+	   droptable casdata="&lmvOutTabNamePboSalAbt._dlv" incaslib="dm_abt" quiet;
+	run;
+	
+	proc fedsql sessref=casauto;
+	  create table casuser.&lmvOutTabNamePboSalAbt._dlv{options replace=true} as
+	  select t1.CHANNEL_CD, t1.SALES_DT, t1.PBO_LOCATION_ID, 
+	   case when t1.sales_dt<&vf_fc_start_dt then
+	   sum(t1.RECEIPT_QTY,t1.Receipt_qty_rest,0) end as receipt_qty,
+		t2.LVL2_ID,
+		t2.LVL3_ID,
+		t3.AVG_PREC,
+		t3.AVG_TEMP, 
+		t3.COUNT_PREC,
+		t3.MAX_TEMP, 
+		t3.MIN_TEMP, 
+		t3.SUM_PREC,
+		coalesce(t4.A_CPI,0) as a_cpi,
+		coalesce(t4.A_GPD,0) as a_gpd,
+		coalesce(t4.A_RDI,0) as a_rdi,
+		coalesce(t5.T_BK,0) as trp_bk,
+		coalesce(t5.T_KFC,0) as trp_kfc,
+		coalesce(t6.COUNT_PROMO_PRODUCT,0) as COUNT_PROMO_PRODUCT, /*не очень хороший предиктор, особенно при наличии акций на все товары*/
+		coalesce(t6.SUM_PROMO_MKUP,0) as SUM_PROMO_MKUP, /*число промо-дней на товары в магазине (за неделю) - аналогично*/
+		coalesce(t7.sum_trp,0) as sum_trp,
+		coalesce(t7.dist_promo,0) as dist_promo /*число различных промо-кампаний, идущих одновременно в пбо*/
+	  from casuser.&lmvOutTabNameTsPboSales t1 
+	  left join casuser.PBO_DICTIONARY t2
+	  on t1.pbo_location_id=t2.pbo_location_id
+	  left join casuser.&lmvOutTabNameWeatherW t3
+	  on t1.pbo_location_id=t3.pbo_location_id 
+	  and t1.sales_dt=t3.period_dt
+	  left join casuser.macro_transposed t4 
+	  on t1.sales_dt=t4.period_dt
+	  left join casuser.media_transposed t5
+	  on t1.sales_dt=t5.report_dt
+	  left join casuser.promo_da t6
+	  on t1.sales_dt=t6.period_dt 
+	  and t1.pbo_location_id=t6.pbo_location_id 
+	  and t1.channel_cd=t6.channel_cd
+	  left join casuser.media_w t7
+	  on t1.sales_dt=t7.period_dt 
+	  and t1.pbo_location_id=t7.pbo_location_id 
+	  and t1.channel_cd=t7.channel_cd
+	  where t1.sales_dt>=&vf_hist_start_dt and t1.channel_cd='DLV'
+	;
+	quit;
+	proc casutil;
+	  promote casdata="&lmvOutTabNamePboSalAbt._dlv" incaslib="casuser" outcaslib="dm_abt";
+	  save incaslib="dm_abt" outcaslib="dm_abt" casdata="&lmvOutTabNamePboSalAbt._dlv" casout="&lmvOutTabNamePboSalAbt._dlv..sashdat" replace;
+	run;
 	
 	proc casutil;  
 		promote casdata="&lmvOutTabNamePboSalAbt." incaslib="casuser" outcaslib="&lmvOutLibrefPboSalAbt.";
+		save incaslib="&lmvOutLibrefPboSalAbt." outcaslib="&lmvOutLibrefPboSalAbt." casdata="&lmvOutTabNamePboSalAbt." casout="&lmvOutTabNamePboSalAbt..sashdat" replace;
 		promote casdata="&lmvOutTabNamePromoW1" incaslib="casuser" outcaslib="&lmvOutLibrefPromoW1";
 		promote casdata="&lmvOutTabNamePromoD." incaslib="casuser" outcaslib="&lmvOutLibrefPromoD"; 
 		promote casdata="&lmvOutTabNameWeatherW" incaslib="casuser" outcaslib="&lmvOutLibrefWeatherW";
@@ -384,6 +443,7 @@
 		droptable casdata="media_ws" incaslib="casuser" quiet;
 		droptable casdata="media_w" incaslib="casuser" quiet;
 		droptable casdata="macro1" incaslib="casuser" quiet;
+		droptable casdata="pbo_sales_rest" incaslib="casuser" quiet;
 	run;
 
 %mend vf_prepare_ts_abt_pbo;

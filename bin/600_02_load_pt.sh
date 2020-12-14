@@ -1,0 +1,1 @@
+/opt/sas/mcd_config/bin/start_sas.sh /opt/sas/mcd_config/macro/flow/600_02_load_pt.sas 600_02_load_pt

@@ -32,9 +32,21 @@
 *  19-08-2020  Михайлова     Изменен механизм подтягивания промо к витрине по орг. структуре. Иерархия элемента int_org_rk из dim_point теперь определяется по иерархии ПБО в ETL_IA
 ****************************************************************************/
 
-%macro promo_calc_update_dm_abt(mpPromoCalculationRk=,mpIn=PUBLIC.ML_SCORE,mpOut=CASUSER.ML_SCORE_&mpPromoCalculationRk,mpOutPromo=CASUSER.PROMO_&mpPromoCalculationRk,mpPromote=N);
+%macro promo_calc_update_dm_abt(mpPromoCalculationRk=,
+								mpIn=PUBLIC.ML_SCORE,
+								mpOut=CASUSER.ML_SCORE_&mpPromoCalculationRk,
+								mpOutPromo=CASUSER.PROMO_&mpPromoCalculationRk,
+								mpPromote=N);
 
-	%local lmvPromoRkList lmvOutLibref lmvOutTabName lmvCASSESS lmvCASSessExist lmvOutPromoLibref lmvOutPromoTabName;
+	%local lmvPromoRkList
+			lmvOutLibref 
+			lmvOutTabName 
+			lmvCASSESS
+			lmvCASSessExist
+			lmvOutPromoLibref
+			lmvOutPromoTabName
+			;
+
 	%let lmvCASSESS = casauto;
 	
 	/*Создать cas-сессию, если её нет*/

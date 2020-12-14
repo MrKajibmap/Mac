@@ -20,7 +20,8 @@
 ******************************************************************
 *  Пример использования:
 *     %vf_run_project(mpProjectName=pbo_sales_v2);
-*
+* 
+
 ****************************************************************************
 *  07-07-2020  Борзунов     Начальное кодирование
 *  11-08-2020  Борзунов		Добавлено получение ID VF-проекта по его имени + параметр mpProjectName
@@ -30,11 +31,11 @@
 	/*proc printto log='/data/tmp/privet_log.txt' new;*/
 	/*run;*/
 	
-	%local lmvAPI_URL lmvOutLibrefPmixSalAbt lmvOutTabNamePmixSalAbt lmvVfPboName lmvProjectId;
+	%local lmvAPI_URL lmvVfPboName lmvProjectId;
 	%let lmvAPI_URL = &CUR_API_URL.;
+	%put _ALL_;
 	filename resp TEMP;
 	
-	%member_names (mpTable=&mpPmixSalAbt, mpLibrefNameKey=lmvOutLibrefPmixSalAbt, mpMemberNameKey=lmvOutTabNamePmixSalAbt);
 	/* Получение списка VF-проектов */
 	%vf_get_project_list(mpOut=work.vf_project_list);
 	/* Извлечение ID для VF-проекта по его имени */

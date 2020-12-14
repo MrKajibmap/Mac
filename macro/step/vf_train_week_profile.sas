@@ -80,7 +80,6 @@
 				and t1.channel_cd=t2.channel_cd
 		;
 	quit;
-
 	proc cas;
 	transpose.transpose /
 	   table={name="gc_days_prop", caslib="casuser", groupby={"channel_cd","PBO_LOCATION_ID"}} 
@@ -91,8 +90,15 @@
 	   casout={name="&lmvOutTabNameWpGc.", caslib="casuser", replace=true};
 	quit;
 	
+	data casuser.&lmvOutTabNameWpGc.(replace=yes);
+		length prday_1 prday_2 prday_3 prday_4 prday_5 prday_6 prday_7 8;
+		call missing(prday_1, prday_2, prday_3, prday_4, prday_5, prday_6, prday_7);
+		set casuser.&lmvOutTabNameWpGc.;
+	run;
+	
 	proc casutil;
 	    promote casdata="&lmvOutTabNameWpGc." incaslib="casuser" outcaslib="&lmvOutLibrefWpGc.";
+		save incaslib="&lmvOutLibrefWpGc." outcaslib="&lmvOutLibrefWpGc." casdata="&lmvOutTabNameWpGc." casout="&lmvOutTabNameWpGc..sashdat" replace;
 	run;
 %mend vf_train_week_profile;
  

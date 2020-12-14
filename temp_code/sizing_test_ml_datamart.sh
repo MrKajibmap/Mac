@@ -1,0 +1,1 @@
+/opt/sas/mcd_config/bin/start_sas.sh /opt/sas/mcd_config/temp_code/sizing_test_ml_datamart.sas sizing_test_ml_datamart

@@ -27,7 +27,7 @@
 %macro text_encoding(mpTable=, mpVariable=);
 
 	proc casutil;
-		droptable incaslib="casuser" casdata="encoding_&mpVariable." quite;
+		droptable incaslib="casuser" casdata="encoding_&mpVariable." quiet;
 	run;
 
 	proc fedsql sessref=casauto;

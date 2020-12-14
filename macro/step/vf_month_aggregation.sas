@@ -385,16 +385,17 @@
 		table.tableExists result = rc / caslib="&lmvOutLibrefNnetWp." name="&lmvOutTabNameNnetWp.";
 		if rc=0  then do;
 			loadtable / caslib="&lmvOutLibrefNnetWp.",
-						path='&lmvOutTabNameNnetWp._ATTR.sashdat',
+						path="&lmvOutTabNameNnetWp._attr.sashdat",
 						casout={caslib="&lmvOutLibrefNnetWp." name='attr2', replace=true};
-			loadtable / caslib="&lmvOutLibrefNnetWp.",
+			loadtable / caslib=/*"&lmvOutLibrefNnetWp."*/"public",
 						path="&lmvOutTabNameNnetWp..sashdat",
 						casout={caslib="&lmvOutLibrefNnetWp." name="&lmvOutTabNameNnetWp.", replace=true};
 			attribute / task='ADD',
 						   caslib="&lmvOutLibrefNnetWp.",
 						name="&lmvOutTabNameNnetWp.",
 						attrtable='attr2';
-			table.promote / name="&lmvOutTabNameNnetWp." caslib=="&lmvOutLibrefNnetWp." target="&lmvOutTabNameNnetWp." targetlib=="&lmvOutLibrefNnetWp.";
+						/* table.promote / name="&lmvOutTabNameNnetWp." caslib=="&lmvOutLibrefNnetWp." target="&lmvOutTabNameNnetWp." targetlib=="&lmvOutLibrefNnetWp."; */
+			table.promote / name="&lmvOutTabNameNnetWp." caslib="&lmvOutLibrefNnetWp." target="&lmvOutTabNameNnetWp." targetlib="&lmvOutLibrefNnetWp.";
 		end;
 		else print("Table &lmvOutLibrefNnetWp..&lmvOutTabNameNnetWp. already loaded");
 	quit;
@@ -637,18 +638,39 @@
 			group by 1,2,3
 		;
 	quit;
+	
+	data casuser.&lmvOutTabNameGc.(replace=yes);
+		set casuser.&lmvOutTabNameGc;
+		format mon_dt yymon7.;
+	run;
+	
+	data casuser.&lmvOutTabNamePmix.(replace=yes);
+		set casuser.&lmvOutTabNamePmix.;
+		format mon_dt yymon7.;
+	run;
+
 	%if &mpPrmt. = Y %then %do;
 		proc casutil;
 			promote casdata="&lmvOutTabNameGc." incaslib="casuser" outcaslib="&lmvOutLibrefGc.";
-			save incaslib="&lmvOutLibrefGc." outcaslib="&lmvOutLibrefGc." casdata="&lmvOutTabNameGc." casout="&lmvOutTabNameGc..sashdat" replace;
-			
+			/* %if %sysfunc(upcase(&lmvOutLibrefGc)) <> CASUSER %then %do; */
+				save incaslib="&lmvOutLibrefGc." outcaslib="&lmvOutLibrefGc." casdata="&lmvOutTabNameGc." casout="&lmvOutTabNameGc..sashdat" replace;
+			/* %end;		*/
 			promote casdata="&lmvOutTabNameOutfor." incaslib="casuser" outcaslib="&lmvOutLibrefOutfor.";
 			
 			promote casdata="plan_pmix_month" incaslib="casuser" outcaslib="&lmvOutLibrefPmix." casout="&lmvOutTabNamePmix.";
-			save incaslib="&lmvOutLibrefPmix." outcaslib="&lmvOutLibrefPmix." casdata="&lmvOutTabNamePmix." casout="&lmvOutTabNamePmix..sashdat" replace;
-			
+			/* %if %sysfunc(upcase(&lmvOutLibrefPmix)) <> CASUSER %then %do; */
+				save incaslib="&lmvOutLibrefPmix." outcaslib="&lmvOutLibrefPmix." casdata="&lmvOutTabNamePmix." casout="&lmvOutTabNamePmix..sashdat" replace;
+			/* %end;		*/	
 			promote casdata="TS_OUTFORGC" incaslib="casuser" outcaslib="&lmvOutLibrefOutforgc.";
 		run;
+
+	/*	%dp_export_csv(mpInput=&lmvOutTabNameGc..&lmvOutLibrefGc.
+						, mpTHREAD_CNT=30
+						, mpPath=/data/dm_rep/);
+		%dp_export_csv(mpInput=&lmvOutLibrefPmix..&lmvOutTabNamePmix.
+						, mpTHREAD_CNT=30
+						, mpPath=/data/dm_rep/);
+						*/
 	%end;
 	%else %do;
 		data &lmvOutLibrefGc..&lmvOutTabNameGc.;

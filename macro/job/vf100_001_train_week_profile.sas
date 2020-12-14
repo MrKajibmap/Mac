@@ -29,10 +29,13 @@
 
 	%let etls_jobName=vf100_001_train_week_profile;
 	%etl_job_start;
+	%m_etl_update_resource_status(P, vf_run_project_pmix);
 	
 	/* Создание модели недельного профиля для разбивки по дням и переагрегации недель до месяцев*/
-	%vf_train_week_profile; 
+	%vf_train_week_profile(mpOutWpGc=dm_abt.wp_gc); 
 	
+	%m_etl_update_resource_status(L, vf_run_project_pmix);
+	%m_etl_open_resource(vf_train_week_profile);
 	%etl_job_finish;
 	
 %mend vf100_001_train_week_profile;

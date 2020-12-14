@@ -35,7 +35,8 @@
 	%local lmvCASSESS lmvReportDt lmvInLibref;
 	%let lmvCASSESS = casauto;
 	%let lmvReportDt=&ETL_CURRENT_DT.;
-	
+	%let lmvReportDttm = &ETL_CURRENT_DTTM.;
+
 	cas &lmvCASSESS.;
 	caslib _all_ assign;
 

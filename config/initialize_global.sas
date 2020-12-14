@@ -87,9 +87,12 @@
 %global VF_FC_AGG_END_DT_SAS;		/* воскресенье последней недели, на которую должен быть прогноз в формате yymmdd10.*/
 %global VF_HIST_START_DT;			/* Дата начала истории */
 %global VF_HIST_START_DT_SAS;		/* Дата начала истории (должна быть понедельником) в формате yymmdd10. */
-%global VF_PMIX_ID;					/* ID VF-проекта, построенного на pbo_sal_abt*/
-%global VF_PBO_ID;					/* ID VF-проекта, построенного на pmix_sal_abt*/
-
+%global VF_FC_END_SHORT_DT;			/* Дата конца истории краткосрочного прогноза в формате date'2020-09-17'*/
+%global VF_FC_END_SHORT_DT_SAS;		/* Дата конца истории краткосрочного прогноза в формате SAS*/
+%global VF_PMIX_ID;					/* ID VF-проекта, построенного на pmix_sal_abt*/
+%global VF_PMIX_PROJ_NM;			/* ID VF-проекта, построенного на pmix_sal_abt*/
+%global VF_PBO_ID;					/* Наименование VF-проекта, построенного на pbo_sal_abt*/
+%global VF_PBO_PROJ_NM;				/* Наименование VF-проекта, построенного на pbo_sal_abt*/
 
 %global SAS_START_CMD;              /* Путь к start_sas */
 
@@ -154,19 +157,23 @@
 %let LSF_HIST_QUERY_DAYS            =  3;
 %let LSF_ELIM_QUERY_S               =  20;
 
-%let VF_FC_HORIZ					=  52;
-%let VF_FC_START_DT 				= date'2019-11-04' /*date %tslit(&ETL_CURRENT_DT.)*/;
-%let VF_FC_START_DT_SAS				= %sysfunc(inputn(%scan(%bquote(/*&ETL_CURRENT_DT.*/date'2019-11-04'),2,%str(%')),yymmdd10.));
+%let VF_FC_HORIZ					=  104;
+%let VF_FC_START_DT 				= date%str(%')%sysfunc(putn(%sysfunc(intnx(week.2,%sysfunc(date()),0,b)),yymmdd10.))%str(%'); /*date %tslit(&ETL_CURRENT_DT.)*/;
+%let VF_FC_START_DT_SAS				= %sysfunc(inputn(%scan(%bquote(&VF_FC_START_DT.),2,%str(%')),yymmdd10.));
 %let VF_FC_START_MONTH_SAS 			= %sysfunc(intnx(month,&VF_FC_START_DT_SAS,0,b));
-%let VF_HIST_END_DT 				= %sysfunc(intnx(day,&VF_FC_START_DT_SAS,-1),yymmddd10.);		
+%let VF_HIST_END_DT 				= %sysfunc(intnx(day,&VF_FC_START_DT_SAS,-1),yymmddd10.);	
+%let VF_HIST_END_DT_SAS				= %sysfunc(inputn(&VF_HIST_END_DT.,yymmdd10.));	
 %let VF_FC_END_DT 					= %sysfunc(intnx(day,&VF_FC_START_DT_sas,7*(&VF_FC_HORIZ-1)),yymmddd10.);		
 %let VF_FC_AGG_END_DT 				= %sysfunc(intnx(day,&VF_FC_START_DT_sas,7*&VF_FC_HORIZ-1),yymmddd10.);
 %let VF_FC_AGG_END_DT_SAS 			= %sysfunc(intnx(day,&VF_FC_START_DT_sas,7*&VF_FC_HORIZ-1));
-%let VF_HIST_START_DT 				= date'2017-01-02';
+%let VF_HIST_START_DT 				= date'2019-01-02';
 %let VF_HIST_START_DT_SAS			= %sysfunc(inputn(%scan(%bquote(&VF_HIST_START_DT),2,%str(%')),yymmdd10.));
+%let VF_FC_END_SHORT_DT_SAS			= %sysfunc(intnx(day, &VF_FC_START_DT_SAS., 90));
+%let VF_FC_END_SHORT_DT 			= date%str(%')%sysfunc(putn(&VF_FC_END_SHORT_DT_SAS.,yymmdd10.))%str(%');
 %let VF_PMIX_ID						= 1ef9c222-17c4-477b-9667-a3ac07320c4e;
 %let VF_PBO_ID 						= c27c04d6-8789-4b2a-af8d-b2f751dc8cd0;
-
+%let VF_PMIX_PROJ_NM				= pmix_sales_v2;
+%let VF_PBO_PROJ_NM					= pbo_sales_v1;
 %let SAS_START_CMD                  =  &ETL_ROOT/config/start_sas.cmd;
 
 /*===================================== GLOBAL ===================================*/
@@ -211,6 +218,7 @@ options
 %let ETL_SYS_CONNECT_OPTIONS        =  server="10.252.151.3" port=5452 user=etl_sys password="{SAS002}DCB5DA3808FAC9EE26380F5007B9E276" database=etl defer=yes;
 %let ETL_IA_CONNECT_OPTIONS         =  server="10.252.151.3" port=5452 user=etl_ia password="{SAS002}1D57933958C580064BD3DCA81A33DFB2" database=etl defer=yes readbuff=32767 conopts="UseServerSidePrepare=1;UseDeclareFetch=1;Fetch=32768";
 %let ETL_STG_CONNECT_OPTIONS        =  server="10.252.151.3" port=5452 user=etl_stg password="{SAS002}1D57933958C580064BD3DCA81A33DFB2" database=etl defer=yes readbuff=32767 conopts="UseServerSidePrepare=1;UseDeclareFetch=1;Fetch=32768";
+%let ETL_CFG_CONNECT_OPTIONS        =  server="10.252.151.3" port=5452 user=etl_cfg password="{SAS002}1D57933958C580064BD3DCA81A33DFB2" database=etl defer=yes readbuff=32767 conopts="UseServerSidePrepare=1;UseDeclareFetch=1;Fetch=32768";
 %let DM_REP_CONNECT_OPTIONS         =  server="10.252.151.3" port=5452 user=dm_rep password="{SAS002}1D57933958C580064BD3DCA81A33DFB2" database=etl defer=yes readbuff=32767 conopts="UseServerSidePrepare=1;UseDeclareFetch=1;Fetch=32768";
 %let DM_ABT_CONNECT_OPTIONS         =  server="10.252.151.3" port=5452 user=dm_abt password="{SAS002}1D57933958C580064BD3DCA81A33DFB2" database=etl defer=yes readbuff=32767 conopts="UseServerSidePrepare=1;UseDeclareFetch=1;Fetch=32768";
 %let IA_CONNECT_OPTIONS             =  DEFER=YES  PATH=WARE  USER=SAS_USER  PASSWORD="{SAS002}C4A120480F3F302F49249CD238FA3D0F" UPDATE_LOCK_TYPE=row;
@@ -227,6 +235,7 @@ libname etl_ia postgres &ETL_IA_CONNECT_OPTIONS schema=etl_ia;
 
 libname etl_stg postgres &ETL_STG_CONNECT_OPTIONS schema=etl_stg;
 
+libname etl_cfg postgres &ETL_CFG_CONNECT_OPTIONS schema=etl_cfg;
 /*libname dm_rep postgres &DM_REP_CONNECT_OPTIONS schema=dm_rep;*/
 
 /*libname dm_abt postgres &DM_ABT_CONNECT_OPTIONS schema=dm_abt;*/

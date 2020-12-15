@@ -1,4 +1,4 @@
-%macro vf_restore_sales_gc_sep;
+%macro vf_restore_sales_gc;
 	option dsoptions=nonote2err;
 	/*входные таблицы mn_long.pmix_sales, pbo_sales, выходные: pbo_sales_rest, pmix_sales_rest*/
 	%if %sysfunc(sessfound(casauto))=0 %then %do;
@@ -214,4 +214,4 @@
 	
 	cas casauto terminate;
 	
-%mend vf_restore_sales_gc_sep;
+%mend vf_restore_sales_gc;

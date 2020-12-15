@@ -20,7 +20,7 @@
 *
 ******************************************************************
 *  Пример использования:
-*     %vf_prepare_ts_abt_pbo_sep(mpPboSalAbt=mn_long.pbo_sal_abt,
+*     %vf_prepare_ts_abt_pbo(mpPboSalAbt=mn_long.pbo_sal_abt,
 *							mpPromoW1=mn_long.promo_w1,
 *							mpPromoD=mn_long.promo_d, 
 *							mpPboSales=mn_long.TS_pbo_sales,
@@ -32,7 +32,7 @@
 *  28-07-2020  Борзунов 	Добавлен параметры mpPboSalAbt,mpPromoW1,mpPromoD,mpPboSales,mpWeatherW
 *  06-10-2020  Д Звежинский Витрины собираются из чеков, восстановленных на периодах закрытия ПБО
 ****************************************************************************/
-%macro vf_prepare_ts_abt_pbo_sep(mpPboSalAbt=mn_long.pbo_sal_abt,
+%macro vf_prepare_ts_abt_pbo(mpPboSalAbt=mn_long.pbo_sal_abt,
 							mpPromoW1=mn_long.promo_w1,
 							mpPromoD=mn_long.promo_d, 
 							mpPboSales=mn_long.TS_pbo_sales,
@@ -469,4 +469,4 @@
 	
 	cas casauto terminate;
 
-%mend vf_prepare_ts_abt_pbo_sep;
+%mend vf_prepare_ts_abt_pbo;

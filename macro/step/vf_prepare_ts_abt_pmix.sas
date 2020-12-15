@@ -26,7 +26,7 @@
 *
 ******************************************************************
 *  Пример использования:
-*     %vf_prepare_ts_abt_pmix_sep(mpVfPboProjName=pbo_sales_v2,
+*     %vf_prepare_ts_abt_pmix(mpVfPboProjName=pbo_sales_v2,
 							mpPmixSalAbt=mn_long.pmix_sal_abt,
 *							mpPromoW1=mn_long.promo_w1,
 *							mpPromoD=mn_long.promo_d,
@@ -40,7 +40,7 @@
 *  11-08-2020  Борзунов		Добавлено получение ID VF-проекта по его имени + параметр mpVfPboProjName
 *  06-10-2020  Д Звежинский Витрины собираются из продаж, восстановленных на периодах закрытия ПБО
 ****************************************************************************/
-%macro vf_prepare_ts_abt_pmix_sep(mpVfPboProjName=pbo_sales_v1,
+%macro vf_prepare_ts_abt_pmix(mpVfPboProjName=pbo_sales_v1,
 							mpPmixSalAbt=mn_long.pmix_sal_abt,
 							mpPromoW1=mn_long.promo_w1,
 							mpPromoD=mn_long.promo_d,
@@ -417,4 +417,4 @@
 	
 	cas casauto terminate;
 	
-%mend vf_prepare_ts_abt_pmix_sep;
+%mend vf_prepare_ts_abt_pmix;

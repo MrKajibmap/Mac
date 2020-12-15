@@ -22,7 +22,7 @@
 *
 ******************************************************************
 *  Пример использования:
-*	%macro rtp_2_load_data_mastercode_v1(mpMode=A,
+*	%macro rtp_2_load_data_mastercode(mpMode=A,
 *							mpInputTableScore=casuser.all_ml_scoring, 
 *							mpInputTableTrain=casuser.all_ml_train,
 *							mpOutputTableScore = casuser.master_code_score,
@@ -33,7 +33,7 @@
 *  24-07-2020  Борзунов     Начальное кодирование
 *  27-08-2020  Борзунов		Добавлено сохранение целевых таблиц на диск
 ****************************************************************************/
-%macro rtp_2_load_data_mastercode_v1( mpMode=A,
+%macro rtp_2_load_data_mastercode( mpMode=A,
 							mpInputTableScore=casshort.all_ml_scoring, 
 							mpInputTableTrain=casshort.all_ml_train,
 							mpOutputTableScore = casshort.master_code_score,
@@ -626,4 +626,4 @@
 	  droptable casdata='mastercode_abt2_ml' incaslib='casuser' quiet;
 	run;
 
-%mend rtp_2_load_data_mastercode_v1;
+%mend rtp_2_load_data_mastercode;

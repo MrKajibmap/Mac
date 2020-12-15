@@ -27,8 +27,8 @@
 *
 ******************************************************************
 *  Пример использования:
-*     %vf_month_aggregation_sep;
-*	  %vf_month_aggregation_sep(mpVfPmixProjName=pmix_sales_v1,
+*     %vf_month_aggregation;
+*	  %vf_month_aggregation(mpVfPmixProjName=pmix_sales_v1,
 *							mpVfPboProjName=pbo_sales_v2,
 *							mpOutPmix=sas_lib.plan_pmix_month,
 *							mpOutGc=sas_lib.plan_gc_month, 
@@ -44,8 +44,7 @@
 *							 на диск в формате .sashdat
 *  11-08-2020  Борзунов		Добавлено получение ID VF-проекта по его имени + 2 параметра mpVfPmixProjName, mpVfPboProjName
 ****************************************************************************/
-
-%macro vf_month_aggregation_sep(mpVfPmixProjName=pmix_sales_v2,
+%macro vf_month_aggregation(mpVfPmixProjName=pmix_sales_v2,
 							mpVfPboProjName=pbo_sales_v1,
 							mpInEventsMkup=mn_long.events_mkup,
 							mpOutPmix=mn_long.plan_pmix_month,
@@ -82,7 +81,6 @@
 	%member_names (mpTable=&mpOutGc, mpLibrefNameKey=lmvOutLibrefGc, mpMemberNameKey=lmvOutTabNameGc); 
 	%member_names (mpTable=&mpOutOutfor, mpLibrefNameKey=lmvOutLibrefOutfor, mpMemberNameKey=lmvOutTabNameOutfor);
 	%member_names (mpTable=&mpOutNnetWp, mpLibrefNameKey=lmvOutLibrefNnetWp, mpMemberNameKey=lmvOutTabNameNnetWp);
-
 
 	/* Получение списка VF-проектов */
 	%vf_get_project_list(mpOut=work.vf_project_list);
@@ -664,4 +662,4 @@
 	
 	cas casauto terminate;
 	
-%mend vf_month_aggregation_sep;
+%mend vf_month_aggregation;

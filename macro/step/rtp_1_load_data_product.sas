@@ -20,16 +20,16 @@
 *
 ******************************************************************
 *  Пример использования:
-*    %rtp_1_load_data_product_v1(mpMode=S, mpOutScore=casuser.all_ml_scoring);
-*	 %rtp_1_load_data_product_v1(mpMode=T, mpOutTrain=casuser.all_ml_train);
-*	 %rtp_1_load_data_product_v1(mpMode=A, mpOutTrain=casuser.all_ml_train, mpOutScore=casuser.all_ml_scoring);
+*    %rtp_1_load_data_product(mpMode=S, mpOutScore=casuser.all_ml_scoring);
+*	 %rtp_1_load_data_product(mpMode=T, mpOutTrain=casuser.all_ml_train);
+*	 %rtp_1_load_data_product(mpMode=A, mpOutTrain=casuser.all_ml_train, mpOutScore=casuser.all_ml_scoring);
 *
 ****************************************************************************
 *  24-07-2020  Борзунов     Начальное кодирование
 *  27-08-2020  Борзунов		Заменен источник данных на ETL_IA. Добавлена выгрузка на диск целевых таблиц
 *  24-09-2020  Борзунов		Добавлена промо-разметка из ПТ
 ****************************************************************************/
-%macro rtp_1_load_data_product_v1(mpMode=A,
+%macro rtp_1_load_data_product(mpMode=A,
 					 mpOutTrain=casshort.all_ml_train,
 					 mpOutScore=casshort.all_ml_scoring,
 					 mpWorkCaslib=casshort);
@@ -1790,4 +1790,4 @@
 		droptable casdata="abt15_ml" incaslib="casuser" quiet;
 	run;
 
-%mend rtp_1_load_data_product_v1;
+%mend rtp_1_load_data_product;

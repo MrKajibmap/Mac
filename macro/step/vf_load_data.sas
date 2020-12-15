@@ -19,13 +19,13 @@
 *
 ******************************************************************
 *  Пример использования:
-*     %vf_load_data_sep(mpEvents=mn_long.events, mpEventsMkup=mn_long.events_mkup);
+*     %vf_load_data(mpEvents=mn_long.events, mpEventsMkup=mn_long.events_mkup);
 *
 ****************************************************************************
 *  02-07-2020  Борзунов     Начальное кодирование
 *  22-07-2020  Борзунов      Изменен источник на ETL_IA
 ****************************************************************************/
-%macro vf_load_data_sep(mpEvents=mn_long.events,mpEventsMkup=mn_long.events_mkup);
+%macro vf_load_data(mpEvents=mn_long.events,mpEventsMkup=mn_long.events_mkup);
 
 	%local lmvInLib lmvOutLibrefEvents lmvOutTabNameEvents lmvOutLibrefEventsMkup lmvOutTabNameEventsMkup;
 	%member_names (mpTable=&mpEvents, mpLibrefNameKey=lmvOutLibrefEvents, mpMemberNameKey=lmvOutTabNameEvents);
@@ -691,4 +691,4 @@
 	
 	cas casauto terminate;
 	
-%mend vf_load_data_sep;
+%mend vf_load_data;

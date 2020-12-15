@@ -21,7 +21,7 @@
 *
 ******************************************************************
 *  Пример использования:
-*	%macro rtp_3_load_data_pbo_v1(mpMode=S,
+*	%macro rtp_3_load_data_pbo(mpMode=S,
 *							mpOutTableTrain=dm_abt.pbo_train,
 							mpOutTableScore=dm_abt.pbo_score);
 *							);
@@ -30,7 +30,7 @@
 *  24-07-2020  Борзунов     Начальное кодирование
 ****************************************************************************/
 
-%macro rtp_3_load_data_pbo_v1(mpMode=A, 
+%macro rtp_3_load_data_pbo(mpMode=A, 
 							mpOutTableTrain=casshort.pbo_train,
 							mpOutTableScore=casshort.pbo_score,
 						    mpWorkCaslib=casshort);
@@ -506,4 +506,4 @@
 		droptable casdata="pbo_abt6_4_ml" incaslib="casuser" quiet;
 	run;
 
-%mend rtp_3_load_data_pbo_v1;
+%mend rtp_3_load_data_pbo;

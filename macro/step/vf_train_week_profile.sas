@@ -19,12 +19,12 @@
 *
 ******************************************************************
 *  Пример использования:
-*     %vf_train_week_profile_sep(mpOutWpGc=mn_long.wp_gc);
+*     %vf_train_week_profile(mpOutWpGc=mn_long.wp_gc);
 *
 ****************************************************************************
 *  02-07-2020  Борзунов     Начальное кодирование
 ****************************************************************************/
-%macro vf_train_week_profile_sep(mpOutWpGc=mn_long.wp_gc);
+%macro vf_train_week_profile(mpOutWpGc=mn_long.wp_gc);
 	/*Создать cas-сессию, если её нет*/
 	%if %sysfunc(sessfound(casauto))=0 %then %do;
 		cas casauto;
@@ -96,5 +96,5 @@
 	
 	cas casauto terminate; 
 	
-%mend vf_train_week_profile_sep;
+%mend vf_train_week_profile;
  

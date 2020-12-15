@@ -40,13 +40,13 @@
 		cas casauto;
 		caslib _all_ assign;
 	%end;
-	/* TEST */
-	/* Clear temporary caslib CASUSER */
+	/* clean caslib */
 	%tech_clean_lib(mpCaslibNm=mn_long);
-	/* TEST */
 	
 	/* Подтягиваем данные из PROMOTOOL */
-	%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
+	*%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
+	%add_promotool_marks(mpOutCaslib=casuser,
+							mpPtCaslib=pt);
 	
 	/*-=-=-=-Подготовка данных и их загрузка в CAS-=-=-=-=-*/
 	/*1. словарь ПБО с иерархиями и атрибутами*/

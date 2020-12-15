@@ -30,8 +30,10 @@
 	run;
 
 	/* Подготовка входных данных */
-	%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
-	
+	*%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
+	%add_promotool_marks(mpOutCaslib=casuser,
+							mpPtCaslib=pt);
+							
 	proc casutil;
 	  droptable casdata="promo" incaslib="casuser" quiet;
 	  droptable casdata="promo_pbo" incaslib="casuser" quiet;

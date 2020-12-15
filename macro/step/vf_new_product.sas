@@ -1647,7 +1647,10 @@ proc casutil;
 *  load data=&inlib..ia_promo_x_pbo casout='ia_promo_x_pbo' outcaslib='public' replace;
 run;
 %if %sysfunc(exist(casuser.media)) eq 0 %then %do;
-	%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
+	*%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
+	%add_promotool_marks(mpOutCaslib=casuser,
+							mpPtCaslib=pt);
+							
 	data CASUSER.media;
 		/* set &lmvInLib..media(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
 		set casuser.media_enh(rename=(report_dt=period_dt));	

@@ -51,7 +51,11 @@
 	Ключ: товар-ресторан-дата*/
 	/*Expand PBO into leaf level*/
 		%if %sysfunc(exist(casuser.promo_pbo)) eq 0 %then %do;
-			%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
+			*%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
+			
+			%add_promotool_marks(mpOutCaslib=casuser,
+							mpPtCaslib=pt);
+							
 			proc casutil;
 			  droptable casdata="promo" incaslib="casuser" quiet;
 			  droptable casdata="promo_pbo" incaslib="casuser" quiet;

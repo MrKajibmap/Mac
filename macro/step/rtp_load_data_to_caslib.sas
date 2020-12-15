@@ -60,7 +60,10 @@
 	
 	%tech_clean_lib(mpCaslibNm=&lmvWorkCaslib.);
 	/* Подтягиваем данные из PROMOTOOL */
-	%add_promotool_marks_sep(mpOutCaslib=&lmvWorkCaslib.,
+	*%add_promotool_marks_sep(mpOutCaslib=&lmvWorkCaslib.,
+							mpPtCaslib=pt);
+							
+	%add_promotool_marks(mpOutCaslib=&lmvWorkCaslib.,
 							mpPtCaslib=pt);
 	/****** 0. Объявление макропеременных ******/
 	options mprint nomprintnest nomlogic nomlogicnest nosymbolgen mcompilenote=all mreplace;

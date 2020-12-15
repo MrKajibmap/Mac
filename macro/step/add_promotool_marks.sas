@@ -1,18 +1,19 @@
-%macro add_promotool_marks(mpIntLibref=casuser,
-							mpExtLibref=pt);
+%macro add_promotool_marks(mpOutCaslib=casuser,
+							mpPtCaslib=pt);
 
 	%if %sysfunc(sessfound(casauto))=0 %then %do;
 			cas casauto;
 			caslib _all_ assign;
 	%end;
 	
+	%local lmvPtCaslib lmvOutCaslib lmvReportDttm lmvInLib;
+	
 	%let etl_current_dt = %sysfunc(today());
 	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
 	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
-	%let etl_stg=&mpExtLibref.;
-	%let outcasl=&mpIntLibref.;
+	%let lmvPtCaslib=&mpPtCaslib.;
+	%let lmvOutCaslib=&mpOutCaslib.;
 	%let lmvInLib=ETL_IA;
-	*%vf_load_data(mpEvents=dm_abt.events,mpEventsMkup=dm_abt.events_mkup);
 
 	proc casutil;
 	  droptable casdata="pt_promo_x_dim_point" incaslib="casuser" quiet;
@@ -28,21 +29,22 @@
 	  droptable casdata="pt_segment_hierarchy" incaslib="casuser" quiet;
 	  droptable casdata="pt_channel" incaslib="casuser" quiet;
 	  droptable casdata="pt_channel_hierarchy" incaslib="casuser" quiet;
-	  load data=&etl_stg..promo_x_dim_point casout='pt_promo_x_dim_point' outcaslib='casuser' replace;
-	  load data=&etl_stg..promo_detail casout='pt_promo_detail' outcaslib='casuser' replace;
-	  load data=&etl_stg..promo_calendar casout='pt_promo_calendar' outcaslib='casuser' replace;
-	  load data=&etl_stg..promo casout='pt_promo' outcaslib='casuser' replace;
-	  load data=&etl_stg..dim_point casout='pt_dim_point' outcaslib='casuser' replace;
-	  load data=&etl_stg..internal_org casout='pt_internal_org' outcaslib='casuser' replace;
-	  load data=&etl_stg..internal_org_hierarchy casout='pt_internal_org_hierarchy' outcaslib='casuser' replace;
-	  load data=&etl_stg..product casout='pt_product' outcaslib='casuser' replace;
-	  load data=&etl_stg..product_hierarchy casout='pt_product_hierarchy' outcaslib='casuser' replace;
-	  load data=&etl_stg..segment casout='pt_segment' outcaslib='casuser' replace;
-	  load data=&etl_stg..segment_hierarchy casout='pt_segment_hierarchy' outcaslib='casuser' replace;
-	  load data=&etl_stg..channel casout='pt_channel' outcaslib='casuser' replace;
-	  load data=&etl_stg..channel_hierarchy casout='pt_channel_hierarchy' outcaslib='casuser' replace;
-	  load data=etl_ia.channel_lookup casout='pt_channel_lookup' outcaslib='casuser' replace;
-	run;
+	  load data=&lmvPtCaslib..promo_x_dim_point casout='pt_promo_x_dim_point' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..promo_detail casout='pt_promo_detail' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..promo_calendar casout='pt_promo_calendar' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..promo casout='pt_promo' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..dim_point casout='pt_dim_point' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..internal_org casout='pt_internal_org' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..internal_org_hierarchy casout='pt_internal_org_hierarchy' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..product casout='pt_product' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..product_hierarchy casout='pt_product_hierarchy' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..segment casout='pt_segment' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..segment_hierarchy casout='pt_segment_hierarchy' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..channel casout='pt_channel' outcaslib='casuser' replace;
+	  load data=&lmvPtCaslib..channel_hierarchy casout='pt_channel_hierarchy' outcaslib='casuser' replace;
+	  load data=&lmvInLib..channel_lookup casout='pt_channel_lookup' outcaslib='casuser' replace;
+	quit;
+
 
 	proc fedsql sessref=casauto;
 		create table casuser.pt_promo1{options replace=true} as
@@ -51,7 +53,7 @@
 			datepart(promo_start_dttm) as start_dt,
 			datepart(promo_end_dttm) as end_dt
 		from casuser.PT_PROMO
-		where promo_status_cd='approved';
+		where trim(promo_status_cd)='approved';
 	quit;
 
 	proc cas;
@@ -63,17 +65,17 @@
 	   casout={name="pt_detail_transposed", caslib="casuser", replace=true};
 	quit;
 	
-	/* �������� ����� */
+	/* Загрузка Промо */
 	data CASUSER.promo (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..promo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
-	/* ������� �������� promo_id ��� promo_id ���� 78b61716-af8e-4deb-97e2-1f79e74c7118 */
+	/* создать числовые promo_id для promo_id вида 78b61716-af8e-4deb-97e2-1f79e74c7118 */
 	proc fedsql sessref=casauto;
 		create table casuser.promo_id_exp{options replace=true} as
 		select 
 		t2.promo_id
-		from &outcasl..promo t1 full outer join casuser.pt_promo1 t2
+		from CASUSER.promo t1 full outer join casuser.pt_promo1 t2
 		on t1.promo_id=inputn(trim(t2.promo_id),'10.')
 		where t1.promo_id is null
 		;
@@ -81,7 +83,7 @@
 	proc fedsql sessref=casauto;
 		create table casuser.max_promo_id{options replace=true} as
 		select max(promo_id) as max_promo_id from
-		&outcasl..promo;
+		CASUSER.promo;
 	quit;
 
 	data casuser.promo_id_map /sessref="casauto" single=yes;;
@@ -91,7 +93,7 @@
 		promo_id_num=max_promo_id+9999+_n_;
 	run;
 
-	/*������� � ������� �����-�����*/
+	/*таблица в разрезе промо-акций*/
 	proc fedsql sessref=casauto;
 		create table casuser.pt_promo2{options replace=true} as
 		select 
@@ -117,13 +119,12 @@
 		;
 	quit;
 
-	/*������� � ������� �������� �����-�����*/
+	/*таблица в разрезе иерархии промо-акции*/
 	proc fedsql sessref=casauto;
 		create table casuser.pt_promo3{options replace=true} as
 		select t1.promo_id,t1.promo_rk,
 		t5.channel_cd as channel_cd,
 		t3.int_org_rk as pbo_location_id,
-		/*t3.product_rk as product_id, -- NO Products in dimpoints*/
 		t3.segment_rk as segment_id
 		from casuser.pt_promo2 t1 left join casuser.PT_PROMO_X_DIM_POINT t2 on t1.promo_rk=t2.promo_rk
 		left join casuser.PT_DIM_POINT t3 on t2.dim_point_rk=t3.dim_point_rk
@@ -131,7 +132,7 @@
 	;
 	quit;
 
-	/*��������� ������� � ���������� �������� �� ���, ������� � �����*/
+	/*разрезаем таблицу с иерархиями отдельно на ПБО, сегмент и канал*/
 	proc fedsql sessref=casauto;
 		create table casuser.promopbo_app{options replace=true} as
 		select distinct promo_id,pbo_location_id
@@ -144,15 +145,15 @@
 		from casuser.pt_promo3;
 	quit;
 	
-	data &outcasl..media (replace=yes rename=(report_dt=period_dt) drop=valid_from_dttm valid_to_dttm);
+	data CASUSER.media (replace=yes rename=(report_dt=period_dt) drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..media(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
-	/*����� ��������� ID ��� promo_group_id, ����� ������� ��� ������� � media*/
+	/*нужны отдельные ID для promo_group_id, через которую идёт мэппинг с media*/
 	proc fedsql sessref=casauto;
 		create table casuser.max_promo_group_id{options replace=true} as
 		select max(promo_group_id) as max_promo_group_id from
-		&outcasl..media;
+		CASUSER.media;
 	quit;
 
 	proc fedsql sessref=casauto;
@@ -168,7 +169,7 @@
 		promo_group_id_num=max_promo_group_id+8888+_n_;
 	run;
 
-	/*���������� ��� ���������� trp � ������� ������*/
+	/*подготовка для добавления trp в разрезе недель*/
 	data casuser.media_app;
 		set casuser.promo_group_id_map ;
 		format period_dt date9.;
@@ -178,7 +179,7 @@
 		end;
 	run;
 
-	/*� ������� ����� ��������� ����, �������, ���� �������*/
+	/*К товарам нужно подтянуть цены, позиции, флаг подарка*/
 	proc fedsql sessref=casauto;
 		create table casuser.promo_detail_spl{options replace=true} as
 		select distinct t1.promo_rk,t2.promo_id,promo_dtl_cd,promo_dtl_vle,
@@ -193,21 +194,31 @@
 	proc fedsql sessref=casauto;
 		create table casuser.promoprod_app1{options replace=true} as
 		select t1.promo_rk,t1.promo_id,
-		inputn(trim(t1.promo_dtl_vle),'10.') as product_id,
+		coalesce(inputn(trim(t1.promo_dtl_vle),'10.'),
+				 inputn(trim(t6.promo_dtl_vle),'10.')) as product_id,
 		case when t1.first_ind=1 or t1.first_ind is null then 'N' 
 			 when t1.first_ind=2 then 'Y' end as gift_flag,
 		coalesce(inputn(trim(t3.promo_dtl_vle),'10.'),1) as Qty,
 		coalesce(inputn(trim(t4.promo_dtl_vle),'10.'),1) as Pos,
 		inputn(trim(t5.promo_dtl_vle),'10.') as Price
 		from casuser.promo_detail_spl t1
-		left join casuser.promo_detail_spl t3 on t1.promo_rk=t3.promo_rk and t1.first_ind=t3.first_ind and t1.second_ind=t3.second_ind and t3.DTL_VLE ='mechPromoSkuQty'
-		left join casuser.promo_detail_spl t4 on t1.promo_rk=t4.promo_rk and t1.first_ind=t4.first_ind and t1.second_ind=t4.second_ind and t4.DTL_VLE ='mechPosition'
-		left join casuser.promo_detail_spl t5 on t1.promo_rk=t5.promo_rk and t1.first_ind=t5.first_ind and t1.second_ind=t5.second_ind and t5.DTL_VLE ='mechPrice'
-		where t1.DTL_VLE='mechPromoSkuId'
+		left join casuser.promo_detail_spl t3 on t1.promo_rk=t3.promo_rk and 
+			t1.first_ind=t3.first_ind and t1.second_ind=t3.second_ind and 
+			t3.DTL_VLE ='mechPromoSkuQty'
+		left join casuser.promo_detail_spl t4 on t1.promo_rk=t4.promo_rk and 
+			t1.first_ind=t4.first_ind and t1.second_ind=t4.second_ind and 
+			t4.DTL_VLE ='mechPosition'
+		left join casuser.promo_detail_spl t5 on t1.promo_rk=t5.promo_rk and 
+			t1.first_ind=t5.first_ind and t1.second_ind=t5.second_ind and 
+			t5.DTL_VLE ='mechPrice'
+		left join casuser.promo_detail_spl t6 on t1.promo_rk=t6.promo_rk and 
+			t1.first_ind=t6.first_ind and t1.second_ind=t6.second_ind and 
+			t6.DTL_VLE ='mechPromoSkuId'
+		where t1.DTL_VLE='mechRegSkuId'
 		;
 	quit;
 
-	/*�������� channel+segment+promo_group_id*/
+	/*добавить channel+segment+promo_group_id*/
 	proc fedsql sessref=casauto;
 		create table casuser.pt_promo2ext{options replace=true} as
 		select 
@@ -236,9 +247,9 @@
 		;
 	quit;
 
-	/*������� CASUSER.PROMO*/
+	/*мэппинг CASUSER.PROMO*/
 	proc fedsql sessref=casauto;
-		create table &outcasl..promo_enh{options replace=true} as
+		create table CASUSER.promo_enh{options replace=true} as
 		select 
 		coalesce(t1.channel_cd,t2.channel_cd) as channel_cd,
 		coalesce(t1.promo_id,t2.promo_id) as promo_id,
@@ -250,33 +261,33 @@
 		coalesce(t1.start_dt,t2.start_dt) as start_dt,
 		coalesce(t1.end_dt,t2.end_dt) as end_dt,
 		coalesce(t1.np_gift_price_amt,t2.mechanicsExpertReview) as np_gift_price_amt
-		from &outcasl..promo t1 full outer join casuser.pt_promo2ext t2
+		from CASUSER.promo t1 full outer join casuser.pt_promo2ext t2
 		on t1.promo_id=t2.promo_id
 		;
 	quit;
 	
-	data &outcasl..promo_pbo (replace=yes drop=valid_from_dttm valid_to_dttm);
+	data CASUSER.promo_pbo (replace=yes drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..promo_x_pbo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
-	data &outcasl..promo_prod (replace=yes drop=valid_from_dttm valid_to_dttm);
+	data CASUSER.promo_prod (replace=yes drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..promo_x_product(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
-	/*������� CASUSER.PROMO_PBO*/
+	/*мэппинг CASUSER.PROMO_PBO*/
 	proc fedsql sessref=casauto;
-		create table &outcasl..promo_pbo_enh{options replace=true} as
+		create table CASUSER.promo_pbo_enh{options replace=true} as
 		select 
 		coalesce(t1.promo_id,t2.promo_id) as promo_id,
 		coalesce(t1.pbo_location_id,t2.pbo_location_id) as pbo_location_id
-		from &outcasl..promo_pbo t1 full outer join casuser.promopbo_app t2
+		from CASUSER.promo_pbo t1 full outer join casuser.promopbo_app t2
 		on t1.promo_id=t2.promo_id
 		;
 	quit;
 
-	/*������� CASUSER.PROMO_PROD*/
+	/*мэппинг CASUSER.PROMO_PROD*/
 	proc fedsql sessref=casauto;
-		create table &outcasl..promo_prod_enh{options replace=true} as
+		create table CASUSER.promo_prod_enh{options replace=true} as
 		select 
 		coalesce(t1.promo_id,t2.promo_id) as promo_id,
 		coalesce(t1.product_id,t2.product_id) as product_id,
@@ -284,22 +295,60 @@
 		coalesce(t1.option_number,t2.pos) as option_number,
 		coalesce(t1.gift_flg,t2.gift_flag) as gift_flag,
 		t2.Price as price
-		from &outcasl..promo_prod t1 full outer join casuser.promoprod_app1 t2
+		from CASUSER.promo_prod t1 full outer join casuser.promoprod_app1 t2
 		on t1.promo_id=t2.promo_id
 		;
 	quit;
 
-	/*������� CASUSER.media*/
+	/*мэппинг CASUSER.media*/
 	proc fedsql sessref=casauto;
-		create table &outcasl..media_enh{options replace=true} as
+		create table CASUSER.media_enh{options replace=true} as
 		select 
 		coalesce(t1.promo_group_id,t2.promo_group_id_num) as promo_group_id,
-		/* �������� ������������ ���� �� report_dt � period_dt */
+		/* Изменено наименование поля на report_dt с period_dt */
 		coalesce(t1.period_dt,t2.period_dt) as report_dt,
 		coalesce(t1.trp,t2.MARKETINGTRP) as trp
-		from &outcasl..media t1 full outer join casuser.media_app t2
+		from CASUSER.media t1 full outer join casuser.media_app t2
 		on t1.promo_group_id=t2.promo_group_id_num
 		;
 	quit;
 
+	proc casutil;
+		droptable casdata='media_enh' incaslib="&lmvOutCaslib." quiet;
+		droptable casdata='promo_prod_enh' incaslib="&lmvOutCaslib." quiet;
+		droptable casdata='promo_pbo_enh' incaslib="&lmvOutCaslib." quiet;
+		droptable casdata='promo_enh' incaslib="&lmvOutCaslib." quiet;
+	
+		promote casdata='media_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
+		promote casdata='promo_prod_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
+		promote casdata='promo_pbo_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
+		promote casdata='promo_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
+		
+		droptable casdata='pt_promo1' incaslib='casuser' quiet;
+		droptable casdata='pt_detail_transposed' incaslib='casuser' quiet;
+		droptable casdata='promo' incaslib='casuser' quiet;
+		droptable casdata='promo_id_exp' incaslib='casuser' quiet;
+		droptable casdata='max_promo_id' incaslib='casuser' quiet;
+		droptable casdata='promo_id_map' incaslib='casuser' quiet;
+		droptable casdata='pt_promo2' incaslib='casuser' quiet;
+		droptable casdata='pt_promo3' incaslib='casuser' quiet;
+		droptable casdata='promopbo_app' incaslib='casuser' quiet;
+		droptable casdata='media' incaslib='casuser' quiet;
+		droptable casdata='max_promo_group_id' incaslib='casuser' quiet;
+		droptable casdata='media_ext' incaslib='casuser' quiet;
+		droptable casdata='promo_group_id_map' incaslib='casuser' quiet;
+		droptable casdata='media_app' incaslib='casuser' quiet;
+		droptable casdata='promo_detail_spl' incaslib='casuser' quiet;
+		droptable casdata='promoprod_app1' incaslib='casuser' quiet;
+		droptable casdata='pt_promo2ext' incaslib='casuser' quiet;
+		droptable casdata='promo_pbo' incaslib='casuser' quiet;
+		droptable casdata='promo_prod' incaslib='casuser' quiet;
+		droptable casdata='promo_enh' incaslib='casuser' quiet;
+		droptable casdata='promo_enh' incaslib='casuser' quiet;
+		droptable casdata='media_enh' incaslib='casuser' quiet;
+		droptable casdata='promo_prod_enh' incaslib='casuser' quiet;
+		droptable casdata='promo_pbo_enh' incaslib='casuser' quiet;
+		droptable casdata='promo_enh' incaslib='casuser' quiet;
+	quit;
+	
 %mend add_promotool_marks;

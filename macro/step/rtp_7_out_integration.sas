@@ -607,8 +607,13 @@ run;
 	%if &mpPrmt. = Y %then %do;
 		proc casutil;
 		promote casdata="&lmvOutTabNamePmixSt." incaslib="&lmvOutLibrefPmixSt." outcaslib="&lmvOutLibrefPmixSt.";
+		save incaslib="&lmvOutLibrefPmixSt." outcaslib="&lmvOutLibrefPmixSt." casdata="&lmvOutTabNamePmixSt." casout="&lmvOutTabNamePmixSt..sashdat" replace;
+		
 		promote casdata="&lmvOutTabNameGcSt." incaslib="&lmvOutLibrefGcSt." outcaslib="&lmvOutLibrefGcSt.";
+		save incaslib="&lmvOutLibrefGcSt." outcaslib="&lmvOutLibrefGcSt." casdata="&lmvOutTabNameGcSt." casout="&lmvOutTabNameGcSt..sashdat" replace;
+		
 		promote casdata="&lmvOutTabNameUptSt." incaslib="&lmvOutLibrefUptSt." outcaslib="&lmvOutLibrefUptSt.";
+		save incaslib="&lmvOutLibrefUptSt." outcaslib="&lmvOutLibrefUptSt." casdata="&lmvOutTabNameUptSt." casout="&lmvOutTabNameUptSt..sashdat" replace;
 		quit;
 	%end;
 

@@ -16,6 +16,12 @@
 	%let lmvInLib=ETL_IA;
 
 	proc casutil;
+		droptable casdata='media_enh' incaslib="&lmvOutCaslib." quiet;
+		droptable casdata='promo_prod_enh' incaslib="&lmvOutCaslib." quiet;
+		droptable casdata='promo_pbo_enh' incaslib="&lmvOutCaslib." quiet;
+		droptable casdata='promo_enh' incaslib="&lmvOutCaslib." quiet;
+		
+		
 	  droptable casdata="pt_promo_x_dim_point" incaslib="casuser" quiet;
 	  droptable casdata="pt_promo_detail" incaslib="casuser" quiet;
 	  droptable casdata="pt_promo_calendar" incaslib="casuser" quiet;
@@ -314,11 +320,6 @@
 	quit;
 
 	proc casutil;
-		droptable casdata='media_enh' incaslib="&lmvOutCaslib." quiet;
-		droptable casdata='promo_prod_enh' incaslib="&lmvOutCaslib." quiet;
-		droptable casdata='promo_pbo_enh' incaslib="&lmvOutCaslib." quiet;
-		droptable casdata='promo_enh' incaslib="&lmvOutCaslib." quiet;
-	
 		promote casdata='media_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
 		promote casdata='promo_prod_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
 		promote casdata='promo_pbo_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";

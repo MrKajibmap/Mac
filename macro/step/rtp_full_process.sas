@@ -253,7 +253,8 @@
 									mpOutOutforgc=casuser.TS_OUTFORGC,
 									mpOutOutfor=casuser.TS_OUTFOR, 
 									mpOutNnetWp=public.nnet_wp1,
-									mpPrmt=Y);
+									mpPrmt=Y,
+									mpInLibref=casshort);
 	%M_LOG_EVENT(END, rtp_7_out_integration);			
 	%M_ETL_REDIRECT_LOG(END, rtp_7_out_integration, Main);
 	
@@ -277,7 +278,7 @@
 					mpInPmixSt=casuser.plan_pmix_day,
 					mpInGcSt=casuser.plan_gc_day, 
 					mpInUptSt=casuser.plan_upt_day, 
-					mpPathOut=/data/tmp/);
+					mpPathOut=/data/dm_rep/);
 	%M_LOG_EVENT(END, rtp_komp_sep);	
 	%M_ETL_REDIRECT_LOG(END, rtp_komp_sep, Main);
 	%symdel mvcnt mvExist;
@@ -294,7 +295,7 @@
 	
 	*%dp_jobexecution(mpJobName=ACT_LOAD_QNT_FoD_KOMP);
 	
-	/*
+	
 	%M_ETL_REDIRECT_LOG(END, load_to_dp, Main);
 	%M_LOG_EVENT(START, load_to_dp);
 	
@@ -419,7 +420,7 @@
 		
 	%mend load_csv_to_dp;
 	%load_csv_to_dp(mpJobName=ACT_LOAD_QNT_FoD_KOMP);
-	*/
+	
 	/* start seeding */
 /*	%dp_jobexecution(mpJobName=ACT_SEED_COMP_SALE_MONTH);
 	%dp_jobexecution(mpJobName=ACT_SEED_COMP_SALE_DAY);

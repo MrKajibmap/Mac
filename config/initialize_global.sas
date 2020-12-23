@@ -126,7 +126,7 @@
 %let ETL_MAX_DTTM                   =  %sysfunc(dhms(&ETL_MAX_DT, 0, 0, 0));
 %let ETL_SCD_NEW_DTTM               =  %sysfunc(dhms(&ETL_MIN_DT, 0, 0, 0));
 %let ETL_SCD_FUTURE_DTTM            =  %sysfunc(putn('01Jan5999 00:00:00'dt, best.));
-%let ETL_CURRENT_DT                 =  /*%sysfunc(date())*/ %sysfunc(inputn(01JUN2020,date9.));
+%let ETL_CURRENT_DT                 =  %sysfunc(date()) /*%sysfunc(inputn(01JUN2020,date9.))*/;
 %let ETL_CURRENT_DTTM               =  %sysfunc(dhms(&ETL_CURRENT_DT,0,0,0));
 
 %let ETL_DEFAULT_COUNTRY            =  "RUS";

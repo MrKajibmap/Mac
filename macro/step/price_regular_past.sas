@@ -13,95 +13,10 @@
 	
 	%let lmvBatchValue = &mpBatchValue.;
 	
-	%let lmvInLib=ETL_IA;
-	%let ETL_CURRENT_DT = %sysfunc(date());
-	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
-	%let lmvReportDt=&ETL_CURRENT_DT.;
-	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
-	
 	%if %sysfunc(sessfound(casauto))=0 %then %do;
 		cas casauto;
 		caslib _all_ assign;
 	%end;
-
-	/* Подготовка входных данных */
-	*%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
-	%add_promotool_marks(mpOutCaslib=casuser,
-							mpPtCaslib=pt);
-							
-	proc casutil;
-	  droptable casdata="promo" incaslib="casuser" quiet;
-	  droptable casdata="promo_pbo" incaslib="casuser" quiet;
-	  droptable casdata="promo_prod" incaslib="casuser" quiet;
-	run;
-	
-	data CASUSER.promo (replace=yes);
-		/* set &lmvInLib..promo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
-		set CASUSER.promo_enh;
-	run;
-	
-	data CASUSER.promo_x_pbo (replace=yes);
-		/* set &lmvInLib..promo_x_pbo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
-		set CASUSER.promo_pbo_enh;
-	run;
-	
-	data CASUSER.promo_x_product (replace=yes);
-		/* set &lmvInLib..promo_x_product(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
-		set casuser.promo_prod_enh;
-	run;
-
-	proc fedsql sessref=casauto noprint;
-		create table casuser.promo {options replace=true} as 
-		select CHANNEL_CD
-		,PROMO_ID
-		,PROMO_GROUP_ID
-		,PROMO_MECHANICS
-		,PROMO_NM
-		,SEGMENT_ID
-		,PROMO_PRICE_AMT
-		,NP_GIFT_PRICE_AMT
-		,start_dt
-		,end_dt
-		from casuser.promo
-		where start_dt is not null and end_dt is not null
-		;
-	quit;
-
-	proc fedsql sessref=casauto noprint;
-		create table casuser.promo_pbo {options replace=true} as 
-		select PBO_LOCATION_ID,PROMO_ID
-		from casuser.promo_X_PBO
-		;
-	quit;
-
-	proc fedsql sessref=casauto noprint;
-		create table casuser.promo_prod {options replace=true} as 
-		select GIFT_FLAG,OPTION_NUMBER,PRODUCT_ID,PRODUCT_QTY,PROMO_ID
-		from casuser.promo_X_PRODUCT
-		;
-	quit;
-	
-		proc casutil;
-	  droptable casdata="price" incaslib="casuser" quiet;
-	run;
-	
-	data CASUSER.PRICE (replace=yes drop=valid_from_dttm valid_to_dttm);
-		set ETL_IA.PRICE(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
-	run;
-
-	proc fedsql sessref=casauto noprint;
-		create table casuser.PRICE{options replace=true} as
-		select 
-		PRODUCT_ID
-		,PBO_LOCATION_ID
-		,PRICE_TYPE
-		,NET_PRICE_AMT
-		,GROSS_PRICE_AMT
-		,START_DT
-		,END_DT
-		from casuser.PRICE
-		;
-	quit;
 	
 	proc casutil;  
 		droptable casdata="&lmvOutTableName" incaslib="&lmvOutTableCLib" quiet;
@@ -142,7 +57,6 @@
 			and t1.CHANNEL_CD = 'ALL'
 		;
 	quit;
-
 
 	/* Фильтрация цен от введенных промо товаров*/
 	proc fedsql sessref=casauto noprint;
@@ -231,7 +145,7 @@
 		run;
 		
 		/* Переход от start_dt end_dt интеревалов к подневному списку в ФАКТИЧЕСКИХ ценах */
-		data casuser.PRICE_BATCH_DAYS_tmp(rename=(start_dt=day_dt) keep=product_id pbo_location_id start_dt net_price_amt gross_price_amt);
+		data casuser.PRICE_BATCH_DAYS(rename=(start_dt=day_dt) keep=product_id pbo_location_id start_dt net_price_amt gross_price_amt);
 			set CASUSER.PRICE_BATCH;
 			output;
 			do while ((start_dt < end_dt) and (start_dt < &VF_HIST_END_DT_SAS.));
@@ -239,21 +153,6 @@
 				output;
 			end;
 		run;
-		
-		/*Устранение дублей в casuser.PRICE_BATCH_DAYS из-за дублей в начальных данных Price*/
-		proc fedsql sessref=casauto noprint;
-			create table CASUSER.PRICE_BATCH_DAYS{options replace=true} as
-				select t1.product_id,
-					   t1.pbo_location_id,
-					   t1.day_dt,
-					   mean(t1.net_price_amt) as net_price_amt,
-					   mean(t1.gross_price_amt) as gross_price_amt
-			from CASUSER.PRICE_BATCH_DAYS_tmp t1
-			group by t1.product_id,
-					 t1.pbo_location_id,
-					 t1.day_dt
-			;
-		quit;		
 		
 		/* Джойн с промо-разметкой и проставление миссингов на цены с промо-днем = 1; замена на миссинги цены во время промо*/
 		proc fedsql sessref=casauto noprint;
@@ -406,13 +305,23 @@
 			prev_gross = max(prev_gross, coalesce(gross_price_amt, 0));
 		run;
 		
-		/* Округление регулярных цен до целого числа*/
+		/* Округление регулярных цен до целого числа и фильтрация дат по открытию или полному закрытию ПБО.*/
+
+		proc fedsql sessref=casauto noprint;
+			create table CASUSER.PRICE_BATCH_DAYS_6{options replace=true} as
+				select t1.product_id,
+					   t1.PBO_LOCATION_ID,
+					   t1.day_dt,
+					   round(t1.net_price_amt) as net_price_amt,
+					   round(t1.gross_price_amt) as gross_price_amt
+			from CASUSER.PRICE_BATCH_DAYS_5 t1
+			left join CASUSER.PBO_DICTIONARY t2
+				on t1.PBO_LOCATION_ID=t2.PBO_LOCATION_ID
+			where t2.A_OPEN_DATE is not null and 
+				t1.day_dt between t2.A_OPEN_DATE and coalesce(t2.A_CLOSE_DATE, date%str(%')&VF_FC_AGG_END_DT.%str(%')) 
+			;
+		quit;
 		
-		data casuser.PRICE_BATCH_DAYS_6(drop=net_price_amt_tmp gross_price_amt_tmp);
-			set casuser.PRICE_BATCH_DAYS_5(rename=(net_price_amt=net_price_amt_tmp gross_price_amt=gross_price_amt_tmp));
-			net_price_amt = round(net_price_amt_tmp);
-			gross_price_amt = round(gross_price_amt_tmp);
-		run;
 		
 		/* Переход от подневной гранулярности к периодной */
 		

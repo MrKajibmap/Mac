@@ -377,7 +377,7 @@
 
 	proc casutil;
      promote casdata="&lmvOutTabNamePmixSalAbt._dlv" incaslib="casuser" outcaslib="mn_long";
-	 save incaslib="mn_long" outcaslib="mn_long" casdata="&lmvOutTabNamePmixSalAbt._dlv" casout="&lmvOutTabNamePmixSalAbt._dlv.sashdat" replace;
+	 *save incaslib="mn_long" outcaslib="mn_long" casdata="&lmvOutTabNamePmixSalAbt._dlv" casout="&lmvOutTabNamePmixSalAbt._dlv.sashdat" replace;
 	run;
 /*
 	data public.&lmvOutTabNamePmixSalAbt._dlv(promote=yes);
@@ -386,7 +386,7 @@
 */	
 	proc casutil;
 		promote casdata="&lmvOutTabNamePmixSalAbt." incaslib="casuser" outcaslib="&lmvOutLibrefPmixSalAbt.";
-		save incaslib="&lmvOutLibrefPmixSalAbt." outcaslib="&lmvOutLibrefPmixSalAbt." casdata="&lmvOutTabNamePmixSalAbt." casout="&lmvOutTabNamePmixSalAbt..sashdat" replace;
+		*save incaslib="&lmvOutLibrefPmixSalAbt." outcaslib="&lmvOutLibrefPmixSalAbt." casdata="&lmvOutTabNamePmixSalAbt." casout="&lmvOutTabNamePmixSalAbt..sashdat" replace;
 		droptable casdata="TS_pmix_sales" incaslib="casuser" quiet;
 		droptable casdata="TS_WEEK_OUTFOR" incaslib="casuser" quiet;
 		droptable casdata="gc_fc_fact" incaslib="casuser" quiet;

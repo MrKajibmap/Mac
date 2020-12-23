@@ -12,7 +12,7 @@
 	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
 	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
 	%let lmvPtCaslib=&mpPtCaslib.;
-	%let lmvOutCaslib=&mpOutCaslib.;
+	%let lmvOutCaslib=%sysfunc(upcase(&mpOutCaslib.));
 	%let lmvInLib=ETL_IA;
 
 	proc casutil;
@@ -320,11 +320,12 @@
 	quit;
 
 	proc casutil;
-		promote casdata='media_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
-		promote casdata='promo_prod_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
-		promote casdata='promo_pbo_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
-		promote casdata='promo_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
-		
+		%if &lmvOutCaslib. ne CASUSER %then %do;
+			promote casdata='media_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
+			promote casdata='promo_prod_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
+			promote casdata='promo_pbo_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
+			promote casdata='promo_enh' incaslib='casuser' outcaslib="&lmvOutCaslib.";
+		%end;
 		droptable casdata='pt_promo1' incaslib='casuser' quiet;
 		droptable casdata='pt_detail_transposed' incaslib='casuser' quiet;
 		droptable casdata='promo' incaslib='casuser' quiet;
@@ -344,12 +345,6 @@
 		droptable casdata='pt_promo2ext' incaslib='casuser' quiet;
 		droptable casdata='promo_pbo' incaslib='casuser' quiet;
 		droptable casdata='promo_prod' incaslib='casuser' quiet;
-		droptable casdata='promo_enh' incaslib='casuser' quiet;
-		droptable casdata='promo_enh' incaslib='casuser' quiet;
-		droptable casdata='media_enh' incaslib='casuser' quiet;
-		droptable casdata='promo_prod_enh' incaslib='casuser' quiet;
-		droptable casdata='promo_pbo_enh' incaslib='casuser' quiet;
-		droptable casdata='promo_enh' incaslib='casuser' quiet;
 	quit;
 	
 %mend add_promotool_marks;

@@ -343,13 +343,13 @@
 		create table public.weeks_with_wp{options replace=true} as
 		select t1.CHANNEL_CD,t1.PBO_LOCATION_ID,
 		t1.SALES_DT,t1.FF,
-		coalesce(prday_1,1/7) as prday_1,
-		coalesce(prday_2,1/7) as prday_2,
-		coalesce(prday_3,1/7) as prday_3,
-		coalesce(prday_4,1/7) as prday_4,
-		coalesce(prday_5,1/7) as prday_5,
-		coalesce(prday_6,1/7) as prday_6,
-		coalesce(prday_7,1/7) as prday_7
+		coalesce(prday_1,divide(1,7)) as prday_1,
+		coalesce(prday_2,divide(1,7)) as prday_2,
+		coalesce(prday_3,divide(1,7)) as prday_3,
+		coalesce(prday_4,divide(1,7)) as prday_4,
+		coalesce(prday_5,divide(1,7)) as prday_5,
+		coalesce(prday_6,divide(1,7)) as prday_6,
+		coalesce(prday_7,divide(1,7)) as prday_7
 		from public.weeks_to_scoregc t1 left join &lmvWpGc t2 
 		on t1.pbo_location_id=t2.pbo_location_id and t1.channel_cd=t2.channel_cd;
 	quit;
@@ -665,13 +665,13 @@
 		create table casuser.weeks_with_wp{options replace=true} as
 		select t1.CHANNEL_CD,t1.PBO_LOCATION_ID,
 		t1.SALES_DT,t1.FF,
-		coalesce(prday_1,1/7) as prday_1,
-		coalesce(prday_2,1/7) as prday_2,
-		coalesce(prday_3,1/7) as prday_3,
-		coalesce(prday_4,1/7) as prday_4,
-		coalesce(prday_5,1/7) as prday_5,
-		coalesce(prday_6,1/7) as prday_6,
-		coalesce(prday_7,1/7) as prday_7
+		coalesce(prday_1,divide(1,7)) as prday_1,
+		coalesce(prday_2,divide(1,7)) as prday_2,
+		coalesce(prday_3,divide(1,7)) as prday_3,
+		coalesce(prday_4,divide(1,7)) as prday_4,
+		coalesce(prday_5,divide(1,7)) as prday_5,
+		coalesce(prday_6,divide(1,7)) as prday_6,
+		coalesce(prday_7,divide(1,7)) as prday_7
 		from casuser.weeks_to_scoregc t1 left join &lmvWpGc t2 
 		on t1.pbo_location_id=t2.pbo_location_id and t1.channel_cd=t2.channel_cd;
 	quit;

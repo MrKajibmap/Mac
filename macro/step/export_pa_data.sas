@@ -35,8 +35,9 @@
 	%global SYS_PROCHTTP_STATUS_CODE SYS_PROCHTTP_STATUS_PHRASE;
 	%let SYS_PROCHTTP_STATUS_CODE=;
 	%let SYS_PROCHTTP_STATUS_PHRASE=;
-	filename resp TEMP;
 	%let SERVICESBASEURL=10.252.151.3/;
+	
+	filename resp TEMP;
     proc http
       method="POST"
       OAUTH_BEARER=SAS_SERVICES
@@ -65,7 +66,7 @@
       "Content-Type"="application/vnd.sas.retail.data.extract.job.detail+json";
     run;
 	
-	/*Вывод в лог статуса */
+	/*Show status in log */
 	libname respjson JSON fileref=resp;
 	%put &=SYS_PROCHTTP_STATUS_CODE &=SYS_PROCHTTP_STATUS_PHRASE;
 	%echo_File(resp);

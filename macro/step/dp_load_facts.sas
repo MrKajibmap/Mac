@@ -33,10 +33,37 @@
 	run;
 
 	/* LOAD fact_gc_month */
+	
+	/*
 	data CASUSER.pbo_sales (replace=yes);
 		set &lmvInLib..pbo_sales(where=( (valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.) and sales_dt>=&BeginOfYear.));
 	run;
-
+	*/
+	
+	proc sql noprint;
+		create table work.pbo_full as
+				select distinct t1.pbo_location_id, t1.sales_dt, t1.channel_cd, t1.receipt_qty, t1.gross_sales_amt, t1.net_sales_amt
+		from (select * 
+			  from etl_ia.pbo_sales t1
+			  where sales_dt>=&BeginOfYear.
+		
+		) t1
+		inner join (select  pbo_location_id, channel_cd, sales_dt, max(valid_to_dttm) as max
+				   from etl_ia.pbo_sales 
+				   where sales_dt>=&BeginOfYear.
+					group by  pbo_location_id, channel_cd,  sales_dt
+				   ) t2 
+		on t2.pbo_location_id = t1.pbo_location_id
+		and t2.sales_dt = t1.sales_dt
+		and t1.valid_to_dttm = t2.max
+		and t1.channel_cd = t2.channel_cd
+		;
+	quit;
+	
+	data casuser.pbo_sales(replace=yes);
+		set work.pbo_full;
+	run;
+	
 	proc fedsql sessref=casauto; 
 		create table casuser.PBO_SALES_day{options replace=true} as 
 		select distinct pbo_location_id, sales_dt,
@@ -69,10 +96,36 @@
 		droptable casdata="&lmvTabNmPmix." incaslib="&lmvLibrefPmix." quiet;
 	run;
 
+	/*
 	data CASUSER.pmix_sales (replace=yes);
 		set &lmvInLib..pmix_sales(where=( (valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.) and sales_dt>=&BeginOfYear.));
 	run;
+	*/
+	
+	proc sql noprint;
+				create table work.pmix_full as 
+				select distinct t1.product_id, t1.pbo_location_id, t1.sales_dt, t1.channel_cd, t1.sales_qty, t1.gross_sales_amt, t1.net_sales_amt, t1.sales_qty_promo
+				from (select * 
+					  from etl_ia.pmix_sales t1
+				 	  where sales_dt>=&BeginOfYear.
+				) t1
+				inner join (select product_id, pbo_location_id, sales_dt, channel_cd, max(valid_to_dttm) as max
+						   from etl_ia.pmix_sales 
+						  where sales_dt>=&BeginOfYear.
+							group by product_id, pbo_location_id, channel_cd, sales_dt
+						   ) t2 
+				on t2.product_id = t1.product_id
+				and t2.pbo_location_id = t1.pbo_location_id
+				and t2.sales_dt = t1.sales_dt
+				and t2.channel_cd = t1.channel_cd
+				and t2.max = t1.valid_to_dttm 
+				;
+			quit;
+
 		
+		data casuser.pmix_sales(replace=yes);
+			set  work.pmix_full;
+		run;
 	proc fedsql sessref=casauto; 
 		create table casuser.sales_prep_m{options replace=true} as
 		select distinct product_id, 

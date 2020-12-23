@@ -12,7 +12,8 @@
 							mpOutOutforgc=casuser.TS_OUTFORGC,
 							mpOutOutfor=casuser.TS_OUTFOR, 
 							mpOutNnetWp=casuser.nnet_wp1,
-							mpPrmt=Y) ;
+							mpPrmt=Y,
+							mpInLibref=&lmvInLibref.);
 
 	%if %sysfunc(sessfound(casauto))=0 %then %do;
 		cas casauto;
@@ -24,14 +25,7 @@
 								&mpOutNnetWp.
 								);
 								
-								
 
-	%let ETL_CURRENT_DT = %sysfunc(date());
-	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
-	%let lmvInLib=ETL_IA;
-	%let lmvReportDt=&ETL_CURRENT_DT.;
-	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
-	
 	%local	lmvOutLibrefPmixSt 
 			lmvOutTabNamePmixSt 
 			lmvOutLibrefGcSt 
@@ -56,50 +50,16 @@
 			lmvInLib
 			lmvReportDt
 			lmvReportDttm
+			lmvInLibref
 			;
 			
+			
+	%let ETL_CURRENT_DT = %sysfunc(date());
+	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
 	%let lmvInLib=ETL_IA;
 	%let lmvReportDt=&ETL_CURRENT_DT.;
 	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
-/*входные параметры дл€ plm*/	
-	/*1 ассорт матрица*/
-	%let lmvAMTab=CASUSER.ASSORT_MATRIX;
-	%if %sysfunc(exist(casuser.assort_matrix)) eq 0 %then %do;
-		data CASUSER.assort_matrix (replace=yes  drop=valid_from_dttm valid_to_dttm);
-			set &lmvInLib..assort_matrix(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-			));
-		run;
-	%end;
-	/*2 информаци€ о временных закрыти€х*/
-	%let lmvPBOCloseTab=casuser.PBO_CLOSE_PERIOD;
-	%if %sysfunc(exist(casuser.pbo_close_period)) eq 0 %then %do;
-		data CASUSER.pbo_close_period (replace=yes  drop=valid_from_dttm valid_to_dttm);
-				set &lmvInLib..pbo_close_period(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
-		run;
-	%end;
-	/*3 таблица lifecycle*/
-	%let lmvLCTab=CASUSER.PRODUCT_CHAIN;
-	%if %sysfunc(exist(casuser.PRODUCT_CHAIN)) eq 0 %then %do;
-
-		data CASUSER.product_chain (replace=yes drop=valid_from_dttm valid_to_dttm);
-			set &lmvInLib..product_chain(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
-		run;
-
-		proc fedsql sessref=casauto noprint;
-			create table casuser.product_chain{options replace=true} as
-			  select 
-				LIFECYCLE_CD
-				,PREDECESSOR_DIM2_ID
-				,PREDECESSOR_PRODUCT_ID
-				,SCALE_FACTOR_PCT
-				,SUCCESSOR_DIM2_ID
-				,SUCCESSOR_PRODUCT_ID
-				,PREDECESSOR_END_DT
-				,SUCCESSOR_START_DT
-			  from casuser.product_chain
-			;
-		quit;
-	%end;
+	%let lmvInLibref=&mpInLibref.;
 	
 	%member_names (mpTable=&mpOutOutfor, mpLibrefNameKey=lmvOutLibrefOutfor, mpMemberNameKey=lmvOutTabNameOutfor);
 	%member_names (mpTable=&mpOutOutforgc, mpLibrefNameKey=lmvOutLibrefOutforgc, mpMemberNameKey=lmvOutTabNameOutforgc); 
@@ -166,7 +126,7 @@
 					&mpInEventsMkup.,
 					&mpInWpGc.,
 					&mpOutNnetWp.,
-					casshort);
+					&lmvInLibref.);
 
 	data casuser.pmix_daily_ ;
 	  set casuser.nnet_wp_scored1;
@@ -192,13 +152,7 @@
 	run;
 
 /*1.5 ѕрогноз новых товаров*/
-  %vf_new_product(mpInCaslib=casshort);
-/*¬ыходна€ таблица:casuser.npf_prediction*/
-*proc fedsql sessref=casauto;
-*select min(sales_dt) as min_dt, max(sales_dt) as max_dt
-*from casuser.NPF_PREDICTION;
-*quit;
-
+  %vf_new_product(mpInCaslib=&lmvInLibref.);
 /*2. ќбъедин€ем таблицы долгосрочного прогноза и краткосрочного - с приоритетом краткосрочного*/
 	data casuser.promo_w2;
 	  set casuser.promo_d; /*table from vf_apply_w_prof*/
@@ -239,7 +193,7 @@
 
 	/*2.1 TODO: вычисление матриц временных закрытий и допустимых дней продаж*/
 	data casuser.days_pbo_date_close; /*дни когда пбо будет уже закрыт (навсегда)*/
-	  set casuser.pbo_dictionary;
+	  set &lmvInLibref..pbo_dictionary;
 	  format period_dt date9.;
 	  keep PBO_LOCATION_ID CHANNEL_CD period_dt;
 	  CHANNEL_CD="ALL"; 
@@ -250,7 +204,8 @@
 	run;
 	
 	data casuser.days_pbo_close; /*дни когда пбо будет временно закрыт*/
-	  set &lmvPBOCloseTab.;
+	  *set &lmvPBOCloseTab.;
+	  set &lmvInLibref..PBO_CLOSE_PERIOD;
 	  format period_dt date9.;
 	  keep PBO_LOCATION_ID CHANNEL_CD period_dt;
 	  if channel_cd="ALL" ;
@@ -279,7 +234,8 @@
 		SUCCESSOR_DIM2_ID, SUCCESSOR_PRODUCT_ID, SCALE_FACTOR_PCT,
 		coalesce(PREDECESSOR_END_DT,cast(intnx('day',SUCCESSOR_START_DT,-1) as date)) as PREDECESSOR_END_DT, 
 		SUCCESSOR_START_DT
-		from &lmvLCTab
+		/* from &lmvLCTab */
+		from &lmvInLibref..PRODUCT_CHAIN
 		where LIFECYCLE_CD='T' 
 		and coalesce(PREDECESSOR_END_DT,cast(intnx('day',SUCCESSOR_START_DT,-1) as date))<=date %tslit(&vf_fc_agg_end_dt)
 		and successor_start_dt>=intnx('month',&vf_fc_start_dt,-3);
@@ -304,7 +260,8 @@
 		select LIFECYCLE_CD, PREDECESSOR_DIM2_ID, PREDECESSOR_PRODUCT_ID,
 		SUCCESSOR_DIM2_ID, SUCCESSOR_PRODUCT_ID, SCALE_FACTOR_PCT,
 		PREDECESSOR_END_DT, SUCCESSOR_START_DT
-		from &lmvLCTab
+		/* from &lmvLCTab */
+		from &lmvInLibref..PRODUCT_CHAIN
 		where LIFECYCLE_CD='D'
 		and predecessor_end_dt<=date %tslit(&vf_fc_agg_end_dt);
 		/*старые выводы не отсекаем
@@ -333,7 +290,7 @@
 	proc fedsql sessref=casauto;
 		create table casuser.AM_new{options replace=true} as
 		select product_id,pbo_location_id, start_dt,end_dt
-		from &lmvAMTab. t1;
+		from &lmvInLibref..ASSORT_MATRIX t1;
 	quit;
     
     data casuser.AM_new(append=yes);
@@ -472,13 +429,10 @@
 			;
 	quit;
 
-data CASUSER.price (replace=yes  drop=valid_from_dttm valid_to_dttm);
-			set etl_ia.price(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
-run;
 /*3. ¬ычисление цен на будущее*/
 	/*приводим к ценам по дн€м*/
 	data casuser.price_unfolded;
-	 set casuser.PRICE;
+	 set &lmvInLibref..PRICE_ML; 
 	 where price_type='F';
 	 keep product_id pbo_location_id net_price_amt gross_price_amt sales_dt;
 	 format sales_dt date9.;

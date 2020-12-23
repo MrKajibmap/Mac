@@ -15,7 +15,10 @@
 	
 	%M_ETL_REDIRECT_LOG(START, vf_load_data, Main);
 	%M_LOG_EVENT(START, vf_load_data);
-		%vf_load_data(mpEvents=mn_long.events, mpEventsMkup=mn_long.events_mkup);
+		%vf_load_data(mpEvents=mn_long.events
+					,mpEventsMkup=mn_long.events_mkup
+					,mpOutLibref = mn_long
+					,mpClearFlg=YES);
 	%M_LOG_EVENT(END, vf_load_data);
 	%M_ETL_REDIRECT_LOG(END, vf_load_data, Main);
 	

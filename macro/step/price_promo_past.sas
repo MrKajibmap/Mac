@@ -212,32 +212,14 @@
 		run;
 		
 		/* Переход от start_dt end_dt интеревалов к подневному списку в ФАКТИЧЕСКИХ ценах */
-		data casuser.PRICE_BATCH_DAYS_tmp(rename=(start_dt=day_dt) keep=product_id pbo_location_id start_dt net_price_amt gross_price_amt);
+		data casuser.PRICE_BATCH_DAYS(rename=(start_dt=day_dt) keep=product_id pbo_location_id start_dt net_price_amt gross_price_amt);
 			set CASUSER.PRICE_BATCH;
 			output;
 		    do while ((start_dt < end_dt) and (start_dt < &VF_HIST_END_DT_SAS.));
 		        start_dt = intnx('days', start_dt, 1);
 		        output;
 		    end;
-		run;
-		
-		/*Устранение дублей в casuser.PRICE_BATCH_DAYS из-за дублей в начальных данных Price*/
-		proc fedsql sessref=casauto noprint;
-			create table CASUSER.PRICE_BATCH_DAYS{options replace=true} as
-				select t1.product_id,
-					   t1.pbo_location_id,
-					   t1.day_dt,
-					   mean(t1.net_price_amt) as net_price_amt,
-					   mean(t1.gross_price_amt) as gross_price_amt
-			from CASUSER.PRICE_BATCH_DAYS_tmp t1
-			group by t1.product_id,
-					 t1.pbo_location_id,
-					 t1.day_dt
-			;
-		quit;		
-		
-		
-		
+		run;		
 
 /* 		=-=-=-=-=-=-=-=-=-=MECHANICS №1,2,10=-=-=-=-=-=-=-=-=-= */		
 
@@ -677,13 +659,13 @@
 
 	/* Объединение всех посчиатанных промо механик в одну таблцицу*/
 		data CASUSER.PROMO_PRICE_ALL_MECHANICS(drop=promo_net_price_amt promo_gross_price_amt);
-			set CASUSER.PRICE_BATCH_DAYS_MECH1210_2 (keep=product_id pbo_location_id day_dt promo_net_price_amt promo_gross_price_amt)
-				CASUSER.PROMO_BATCH_DAYS_MECH345_5 (keep=product_id pbo_location_id day_dt promo_net_price_amt promo_gross_price_amt)
-				CASUSER.PROMO_BATCH_DAYS_MECH68_5 (keep=product_id pbo_location_id day_dt promo_net_price_amt promo_gross_price_amt)
-				CASUSER.PROMO_BATCH_DAYS_MECH7_3 (keep=product_id pbo_location_id day_dt promo_net_price_amt promo_gross_price_amt)
+			set CASUSER.PRICE_BATCH_DAYS_MECH1210_2 (keep=promo_id product_id pbo_location_id day_dt promo_net_price_amt promo_gross_price_amt)
+				CASUSER.PROMO_BATCH_DAYS_MECH345_5 (keep=promo_id product_id pbo_location_id day_dt promo_net_price_amt promo_gross_price_amt)
+				CASUSER.PROMO_BATCH_DAYS_MECH68_5 (keep=promo_id product_id pbo_location_id day_dt promo_net_price_amt promo_gross_price_amt)
+				CASUSER.PROMO_BATCH_DAYS_MECH7_3 (keep=promo_id product_id pbo_location_id day_dt promo_net_price_amt promo_gross_price_amt)
 			;
 			where day_dt between &VF_HIST_START_DT_SAS. and &VF_HIST_END_DT_SAS;			
-			if net_price_amt = . then do;
+			if promo_net_price_amt = . then do;
 				net_price_amt = promo_net_price_amt;
 				gross_price_amt = promo_gross_price_amt;
 			end;
@@ -697,8 +679,8 @@
 		
 		data CASUSER.PROMO_INTERVALS(rename=(price_net=net_price_amt price_gro=gross_price_amt));
 			set CASUSER.PROMO_PRICE_ALL_MECHANICS;
-			by pbo_location_id product_id day_dt;
-			keep pbo_location_id product_id start_dt end_dt price_net price_gro;
+			by promo_id pbo_location_id product_id day_dt;
+			keep promo_id pbo_location_id product_id start_dt end_dt price_net price_gro;
 			format start_dt end_dt date9.;
 			retain start_dt end_dt price_net price_gro l_gross_price;
 			

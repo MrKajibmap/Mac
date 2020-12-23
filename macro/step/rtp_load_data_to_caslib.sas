@@ -4,12 +4,10 @@
 *
 ******************************************************************
 *  НАЗНАЧЕНИЕ:
-*     Макрос для загрузки данных в CAS в рамках сквозного процесса для оперпрогноза (продукты)
+*     Макрос для загрузки данных в CAS в рамках сквозного процесса для оперпрогноза
 *
 *  ПАРАМЕТРЫ:
-*     mpMode 		- Режим работы - S/T/A(Скоринг/Обучение/Обучение+скоринг)
-*	  mpOutTrain	- выходная таблица набора для обучения
-*	  mpOutScore	- выходная таблица набора для скоринга
+*     mpWorkCaslib 		- CAS-либа источник для расчета сквозного процесса
 *	
 ******************************************************************
 *  Использует: 
@@ -20,9 +18,7 @@
 *
 ******************************************************************
 *  Пример использования:
-*    %rtp_load_data_to_caslib(mpMode=S, mpOutScore=casuser.all_ml_scoring);
-*	 %rtp_load_data_to_caslib(mpMode=T, mpOutTrain=casuser.all_ml_train);
-*	 %rtp_load_data_to_caslib(mpMode=A, mpOutTrain=casuser.all_ml_train, mpOutScore=casuser.all_ml_scoring);
+*    %rtp_load_data_to_caslib(mpWorkCaslib=casshort)
 *
 ****************************************************************************
 *  24-07-2020  Борзунов     Начальное кодирование
@@ -31,6 +27,8 @@
 ****************************************************************************/
 %macro rtp_load_data_to_caslib(mpWorkCaslib=casshort);
 
+	options mprint nomprintnest nomlogic nomlogicnest nosymbolgen mcompilenote=all mreplace;
+	
 	%local 	lmvInLib
 			lmvReportDttm 
 			lmvStartDate 
@@ -39,7 +37,6 @@
 			lmvScoreEndDate
 			;
 			
-	%let lmvMode = &mpMode.;
 	%let lmvInLib=ETL_IA;
 	%let etl_current_dt = %sysfunc(today());
 	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
@@ -59,15 +56,9 @@
 	%end;
 	
 	%tech_clean_lib(mpCaslibNm=&lmvWorkCaslib.);
-	/* Подтягиваем данные из PROMOTOOL */
-	*%add_promotool_marks_sep(mpOutCaslib=&lmvWorkCaslib.,
-							mpPtCaslib=pt);
 							
 	%add_promotool_marks(mpOutCaslib=&lmvWorkCaslib.,
 							mpPtCaslib=pt);
-	/****** 0. Объявление макропеременных ******/
-	options mprint nomprintnest nomlogic nomlogicnest nosymbolgen mcompilenote=all mreplace;
-	/*Создать cas-сессию, если её нет*/
 	
 	/****** 1. Сбор "каркаса" из pmix ******/
 	/* Сначала собираем справочник товаров для того, чтобы создать фильтр */
@@ -188,12 +179,10 @@
 	run;
 	
 	proc casutil;
-		droptable casdata="product_dictionary_ml" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="product_lvl_all" incaslib="&lmvWorkCaslib." quiet;
-	  promote casdata="product_dictionary_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
-	  promote casdata="product_lvl_all" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
-	  droptable casdata='product' incaslib='casuser' quiet;
-	  droptable casdata='product_ATTRIBUTES' incaslib='casuser' quiet;
+		promote casdata="product_dictionary_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
+		*promote casdata="product_lvl_all" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
+		droptable casdata='product' incaslib='casuser' quiet;
+		droptable casdata='product_ATTRIBUTES' incaslib='casuser' quiet;
 	run;
 
 	/* Подготовка таблицы с продажами (на время перезаливки таблицы ETL_IA.PMIX_SALES данные берем напрямую из IA) */
@@ -211,13 +200,19 @@
 			
 			proc sql noprint;
 				create table work.pmix_full as 
-				select t1.product_id, t1.pbo_location_id, t1.sales_dt, t1.channel_cd, t1.sales_qty, t1.gross_sales_amt, t1.net_sales_amt, t1.sales_qty_promo
+				select distinct t1.product_id, t1.pbo_location_id, t1.sales_dt, t1.channel_cd, t1.sales_qty, t1.gross_sales_amt, t1.net_sales_amt, t1.sales_qty_promo
 				from (select * 
+				/*
 					  from etl_ia.pmix_sales t1
+					  */
+					    from etl_ia.pmix_sales t1
 				 	  where sales_dt > &lmvStartDate.
 				) t1
 				inner join (select product_id, pbo_location_id, sales_dt,channel_cd, max(valid_to_dttm) as max
+							/*
 						   from etl_ia.pmix_sales 
+						   */
+						    from etl_ia.pmix_sales
 						  where sales_dt > &lmvStartDate.
 							group by product_id, pbo_location_id, channel_cd, sales_dt
 						   ) t2 
@@ -237,8 +232,7 @@
 
 
 		proc casutil; 
-				droptable casdata="pmix_sales" incaslib="&lmvWorkCaslib." quiet;
-				promote casdata="pmix_sales" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
+			promote casdata="pmix_sales" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		run;
 			
 	
@@ -254,12 +248,8 @@
 	run;
 
 	proc casutil;
-		droptable casdata="price_ml" incaslib="&lmvWorkCaslib." quiet;
-	  promote casdata="price_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
+		promote casdata="price_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 	run;
-
-	/****** 3. Протяжка временных рядов ******/
-	%let fc_end=%sysfunc(putn(&lmvScoreEndDate,yymmdd10.));
 
 	/****** 4. Фильтрация ******/
 	/* 4.1 Убираем временные закрытия ПБО */
@@ -287,9 +277,8 @@
 	quit;
 
 	proc casutil;
-	droptable casdata="pbo_closed_ml" incaslib="&lmvWorkCaslib." quiet;
-	  promote casdata="pbo_closed_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
-	  droptable casdata="closed_pbo" incaslib="casuser" quiet;
+		promote casdata="pbo_closed_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
+		droptable casdata="closed_pbo" incaslib="casuser" quiet;
 	run;
 
 	data CASUSER.PBO_LOC_ATTRIBUTES (replace=yes  drop=valid_from_dttm valid_to_dttm);
@@ -322,23 +311,17 @@
 
 	/* 4.4 Пересекаем с ассортиментной матрицей скоринговую витрину */
 	proc casutil;
-		droptable casdata="closed_pbo" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata="closed_pbo" incaslib="casuser" outcaslib="&lmvWorkCaslib."; 
-		droptable casdata="assort_matrix" incaslib="casuser" quiet;
 	run;
 	
 	data CASUSER.assort_matrix (replace=yes  drop=valid_from_dttm valid_to_dttm);
-		set &lmvInLib..assort_matrix(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-		/*and end_dt<=&lmvEndDate. and start_dt>=&lmvStartDate.*/));
+		set &lmvInLib..assort_matrix(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
 	proc casutil;
-		droptable casdata="assort_matrix" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="pbo_close_period" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata="assort_matrix" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="pbo_close_period" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		droptable casdata="pbo_closed_ml" incaslib="casuser" quiet;
-		droptable casdata="pbo_close_period" incaslib="casuser" quiet;
 	run;
 
 	/****** 6. Добавление промо ******/
@@ -350,7 +333,7 @@
 		droptable casdata="lvl2" incaslib="casuser" quiet;
 		droptable casdata="lvl1" incaslib="casuser" quiet;
 		droptable casdata="pbo_lvl_all" incaslib="casuser" quiet;
-		droptable casdata="product_lvl_all" incaslib="casuser" quiet;
+		*droptable casdata="product_lvl_all" incaslib="casuser" quiet;
 		droptable casdata="promo_ml" incaslib="casuser" quiet;
 		droptable casdata="promo_transposed" incaslib="casuser" quiet;
 		droptable casdata="promo_x_product_leaf" incaslib="casuser" quiet;
@@ -364,17 +347,14 @@
 	run;
 	
 	data CASUSER.promo (replace=yes);
-		/* set &lmvInLib..promo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
 		set &lmvWorkCaslib..promo_enh;
 	run;
 	
 	data CASUSER.promo_x_pbo (replace=yes);
-		/* set &lmvInLib..promo_x_pbo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
 		set &lmvWorkCaslib..promo_pbo_enh;
 	run;
 	
 	data CASUSER.promo_x_product (replace=yes);
-		/* set &lmvInLib..promo_x_product(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
 		set &lmvWorkCaslib..promo_prod_enh;
 	run;
 	
@@ -482,10 +462,9 @@
 	quit;
 
 	/* Соединяем в единый справочник ПБО */
-	data casuser.product_lvl_all;
-		set casuser.lvl5 casuser.lvl4 casuser.lvl3 casuser.lvl2 casuser.lvl1;
-	run;
-
+	*data casuser.product_lvl_all;
+		*set casuser.lvl5 casuser.lvl4 casuser.lvl3 casuser.lvl2 casuser.lvl1;
+	*run;
 
 	/* Добавляем к таблице промо ПБО и товары */
 	proc fedsql sessref = casauto;
@@ -530,17 +509,6 @@
 					when t1.PROMO_MECHANICS = 'NP Promo Support' then 'support'
 					/* TEMP  else 'other_promo' */
 				end) as promo_mechanics_name,
-				/* (case
-					when t1.PROMO_MECHANICS = 'BOG' then 'bogo'
-					when t1.PROMO_MECHANICS = 'Dis' then 'discount'
-					when t1.PROMO_MECHANICS = 'EVM' then 'evm_set'
-					when t1.PROMO_MECHANICS = 'Non' then 'non_product_gift'
-					when t1.PROMO_MECHANICS = 'Pai' then 'pairs'
-					when t1.PROMO_MECHANICS = 'Pro' then 'product_gift'
-					when t1.PROMO_MECHANICS = 'Oth' then 'other_promo'
-					when t1.PROMO_MECHANICS = 'NP ' then 'support'
-					else 'other_promo'
-				end) as promo_mechanics_name, */
 				1 as promo_flag		
 			from
 				casuser.promo as t1 
@@ -557,10 +525,6 @@
 		
 	proc casutil;
 		droptable casdata="promo_x_product_leaf" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="product_lvl_all" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="pbo_lvl_all" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="promo_pbo" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="promo_prod" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata="product_lvl_all" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="pbo_lvl_all" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="promo_prod" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
@@ -601,8 +565,6 @@
 	quit;
 
 	proc casutil;
-		droptable casdata="promo_ml" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="promo_transposed" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata="promo_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="promo_transposed" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="promo_ml_main_code" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
@@ -614,8 +576,6 @@
 		droptable casdata="lvl1" incaslib="casuser" quiet;
 		droptable casdata="pbo_loc_hierarchy" incaslib="casuser" quiet;
 		droptable casdata="product_hierarchy" incaslib="casuser" quiet;
-		droptable casdata="promo_transposed" incaslib="casuser" quiet;
-		droptable casdata="promo_ml_main_code" incaslib="casuser" quiet;
 		droptable casdata="abt_promo" incaslib="casuser" quiet;
 		droptable casdata="abt5_ml" incaslib="casuser" quiet;
 	run;
@@ -628,9 +588,9 @@
 	  droptable casdata="abt7_ml" incaslib="casuser" quiet;
 	  run;
 
-		data CASUSER.macro (replace=yes  drop=valid_from_dttm valid_to_dttm);
-			set &lmvInLib..macro_factor(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
-		run;
+	data CASUSER.macro (replace=yes  drop=valid_from_dttm valid_to_dttm);
+		set &lmvInLib..macro_factor(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+	run;
 
 	proc fedsql sessref=casauto;
 		create table casuser.macro_ml{options replace=true} as 
@@ -665,12 +625,11 @@
 	quit;
 
 	proc casutil;
-		droptable casdata="macro_transposed_ml" incaslib="&lmvWorkCaslib." quiet;
-	  promote casdata="macro_transposed_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
-	  droptable casdata="macro2_ml" incaslib="casuser" quiet;
-	  droptable casdata="macro" incaslib="casuser" quiet;
-	  droptable casdata="macro_ml" incaslib="casuser" quiet;
-	  droptable casdata="abt6_ml" incaslib="casuser" quiet;
+		promote casdata="macro_transposed_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
+		droptable casdata="macro2_ml" incaslib="casuser" quiet;
+		droptable casdata="macro" incaslib="casuser" quiet;
+		droptable casdata="macro_ml" incaslib="casuser" quiet;
+		droptable casdata="abt6_ml" incaslib="casuser" quiet;
 	run;
 
 
@@ -684,7 +643,6 @@
 	run;
 
 	proc casutil;
-		droptable casdata="weather" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata="weather" incaslib="casuser" outcaslib="&lmvWorkCaslib."; 
 	run;
 
@@ -749,11 +707,8 @@
 	quit;
 
 	proc casutil;
-		droptable casdata="comp_transposed_ml_expand" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="comp_media" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata='comp_transposed_ml_expand' incaslib='casuser' outcaslib="&lmvWorkCaslib.";
 		promote casdata='comp_media' incaslib='casuser' outcaslib="&lmvWorkCaslib.";
-		droptable casdata='comp_media' incaslib='casuser' quiet;
 		droptable casdata='comp_media_ml' incaslib='casuser' quiet;
 		droptable casdata='comp_transposed_ml' incaslib='casuser' quiet;
 	run;
@@ -765,7 +720,6 @@
 	run;
 
 	data CASUSER.media (replace=yes);
-		/* set &lmvInLib..media(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
 		set &lmvWorkCaslib..media_enh;
 	run;
 
@@ -870,13 +824,6 @@
 	quit;
 
 	proc casutil;
-		droptable casdata="num_of_promo_prod" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="promo_x_pbo_leaf" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="promo" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="promo_x_product_leaf" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="promo_ml_trp_expand" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="media" incaslib="&lmvWorkCaslib." quiet;
-		droptable casdata="sum_trp" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata="num_of_promo_prod" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="promo" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="promo_x_pbo_leaf" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
@@ -884,12 +831,9 @@
 		promote casdata="promo_ml_trp_expand" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="media" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="sum_trp" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
-		droptable casdata="media" incaslib="casuser" quiet;
 		droptable casdata="promo_x_product" incaslib="casuser" quiet;
 		droptable casdata="promo_x_pbo" incaslib="casuser" quiet;
 		droptable casdata="promo_ml_trp" incaslib="casuser" quiet;
-		droptable casdata="sum_trp" incaslib="casuser" quiet;
-		droptable casdata="abt9_ml" incaslib="casuser" quiet;
 	run;
 
 	/******	12. Добавим атрибуты ПБО ******/
@@ -900,7 +844,6 @@
 	data CASUSER.pbo_location (replace=yes  drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..pbo_location(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
-
 
 	proc fedsql sessref=casauto;
 		create table casuser.pbo_dictionary_ml{options replace=true} as
@@ -950,15 +893,12 @@
 	%text_encoding(mpTable=casuser.pbo_dictionary_ml, mpVariable=A_DRIVE_THRU)
 	%text_encoding(mpTable=casuser.pbo_dictionary_ml, mpVariable=A_WINDOW_TYPE)
 
-
 	proc casutil;
-		droptable casdata="pbo_dictionary_ml" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata="pbo_dictionary_ml" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		droptable casdata='pbo_location' incaslib='casuser' quiet;
 		droptable casdata='pbo_loc_attributes' incaslib='casuser' quiet;
 		droptable casdata='pbo_hier_flat' incaslib='casuser' quiet;
 		droptable casdata='attr_transposed' incaslib='casuser' quiet;
-		/*droptable casdata='pbo_dictionary_ml' incaslib='casuser' quiet;*/
 	run;
 
 	/****** 13. Добавляем календарные признаки *******/
@@ -1019,9 +959,8 @@
 	quit;
 
 	proc casutil;
-		droptable casdata="cldr_prep_features" incaslib="&lmvWorkCaslib." quiet;
-		  load data=work.cldr_prep_features2 casout='cldr_prep_features' outcaslib='casuser' replace;
-		  promote casdata="cldr_prep_features" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
+		load data=work.cldr_prep_features2 casout='cldr_prep_features' outcaslib='casuser' replace;
+		promote casdata="cldr_prep_features" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		droptable casdata="russia_event" incaslib="casuser" quiet;
 		droptable casdata="russia_event2" incaslib="casuser" quiet;
 		droptable casdata="russia_event_t" incaslib="casuser" quiet;
@@ -1060,11 +999,9 @@
 	quit;
 
 	proc casutil;
-		droptable casdata="russia_event" incaslib="&lmvWorkCaslib." quiet;
 		promote casdata="russia_event_t" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		droptable casdata="russia_event" incaslib="casuser" quiet;
 		droptable casdata="russia_event2" incaslib="casuser" quiet;
-		droptable casdata="russia_event_t" incaslib="casuser" quiet;
 	run;
 
 	/* part for va_fpply_w_prof */
@@ -1148,10 +1085,6 @@
 	  droptable casdata='product_ATTRIBUTES' incaslib='casuser' quiet;
 	  droptable casdata='product_hier_flat' incaslib='casuser' quiet;
 	  droptable casdata='attr_transposed' incaslib='casuser' quiet;
-	run;
-	
-	proc casutil;
-	  droptable casdata="pbo_dictionary" incaslib="&lmvWorkCaslib." quiet;
 	run;
 	
 	data CASUSER.PBO_LOCATION (replace=yes drop=valid_from_dttm valid_to_dttm);
@@ -1241,10 +1174,6 @@
 	run;
 	
 	/* part for vf_new_product*/
-	proc casutil;
-	  droptable casdata="product_chain" incaslib="&lmvWorkCaslib." quiet;
-	run;
-
 	data CASUSER.product_chain (replace=yes drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..product_chain(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
@@ -1271,8 +1200,13 @@
 	data CASUSER.ingridients (replace=yes);
         set ETL_STG2.ia_ingridients;
     run;
-	
+	/*
+	data CASUSER.ingridients (replace=yes);
+        set &lmvInLib..ingridients(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+    run;
+	*/
 	proc casutil;
 	  promote casdata="ingridients" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 	run;
+	
 %mend rtp_load_data_to_caslib;

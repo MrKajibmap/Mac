@@ -179,10 +179,12 @@
 			coalesce(t4.product_id,t1.PRODUCT_ID) as product_id,
 			coalesce(t4.sales_dt,t1.period_dt) as period_dt,
 			coalesce(cast(intnx('month',t4.sales_dt,0) as date),t1.mon_dt) as mon_dt,
-			coalesce(t4.P_REC_REC_SUM_QTY,t1.ff) as ff
+			/* coalesce(t4.P_REC_REC_SUM_QTY,t1.ff) as ff */
+			t1.ff
 		from casuser.pmix_daily_ t1 full outer join 
-		(select t2.PBO_LOCATION_ID, t2.PRODUCT_ID, t2.sales_dt, t3.channel_cd,
-				t2.P_REC_REC_SUM_QTY from
+		(select t2.PBO_LOCATION_ID, t2.PRODUCT_ID, t2.sales_dt, t3.channel_cd
+				/* t2.P_REC_REC_SUM_QTY */
+				from
                 &mpMLPmixTabName t2 left join DM_ABT.ENCODING_CHANNEL_CD t3
 				on t2.channel_cd=t3.channel_cd_id
 				where t2.sales_dt between &VF_FC_START_DT and &VF_FC_END_SHORT_DT ) t4
@@ -412,7 +414,9 @@
 
 	proc casutil;
 			promote casdata="plm_sales_mask1" incaslib="casuser" outcaslib="dm_abt";
-			promote casdata="fc_w_plm" incaslib="casuser" outcaslib="casuser";
+			save incaslib="dm_abt" outcaslib="dm_abt" casdata="plm_sales_mask1" casout="plm_sales_mask1.sashdat" replace;
+			droptable casdata="plm_sales_mask1" incaslib="dm_abt" quiet;
+			*promote casdata="fc_w_plm" incaslib="casuser" outcaslib="casuser";
 	quit;
 /*======================================*/
 /*2.6 TODO: прогнозы GC от отдела развити€ - добавить к прогнозу GC insert-update*/
@@ -450,7 +454,6 @@
 
 	proc casutil;
 	  droptable casdata="price_unfolded" incaslib="casuser" quiet;
-	run;
 	quit;
 	 
 	/*прот€гиваем неизвестные цены последним известным значением до горизонта прогнозировани€*/
@@ -483,7 +486,7 @@
 /*4.1 Units*/
 	proc fedsql sessref=casauto;
 	create table &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt.{options replace=true} as
-		select 
+		select distinct
 			cast(t1.product_id as integer) as PROD /*Ц »ƒ продукта*/,
 			cast(t1.pbo_location_id as integer) as LOCATION /*Ц »ƒ ресторана*/,
 			t1.period_dt as DATA /*Ц ƒата прогноза или факта (день)*/,
@@ -515,7 +518,7 @@
 /*4.2 GC:*/
 	proc fedsql sessref=casauto;
 	create table &lmvOutLibrefGcSt..&lmvOutTabNameGcSt.{options replace=true} as
-		select 
+		select distinct
 			1 as PROD /*Ц »ƒ продукта на верхнем уровне (ALL Product, значение = 1)*/,
 			cast(pbo_location_id as integer) as LOCATION /*Ц »ƒ ресторана*/,
 			period_dt as DATA /*Ц ƒата прогноза или факта (день)*/,
@@ -536,7 +539,7 @@
 	*/
 	proc fedsql sessref=casauto;
 	create table &lmvOutLibrefUptSt..&lmvOutTabNameUptSt.{options replace=true} as
-		select 
+		select distinct
 			cast(t1.prod as integer) as PROD /*Ц »ƒ продукта на верхнем уровне (ALL Product, значение = 1) */,
 			cast(t1.location as integer) as LOCATION /*Ц »ƒ ресторана*/,
 			t1.data as DATA /*Ц ƒата прогноза или факта (день)*/,
@@ -582,7 +585,7 @@
 /*5.1 Units*/
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefPmixLt..&lmvOutTabNamePmixLt.{options replace=true} as
-			select
+			select distinct
 			cast(t1.product_id as integer) as PROD /*Ц »ƒ продукта*/,
 			cast(t1.pbo_location_id as integer) as LOCATION /*Ц »ƒ ресторана*/,
 			cast(intnx('month',t1.period_dt,0,'b') as date) as DATA /*Ц ћес€ц прогноза или факта в формате (дата 1-го числа мес€ца прогноза или факта).*/,
@@ -614,7 +617,7 @@
 /*5.2 GC*/
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefGcLt..&lmvOutTabNameGcLt.{options replace=true} as
-			select
+			select distinct
 			1 as PROD /*Ц »ƒ продукта на верхнем уровне (ALL Product, значение = 1)*/,
 			cast(t1.pbo_location_id as integer) as LOCATION /*Ц »ƒ ресторана*/,
 			cast(intnx('month',t1.period_dt,0,'b') as date) as DATA /*Ц ƒата прогноза или факта (мес€ц)*/,
@@ -630,7 +633,7 @@
 /*5.3 UPT*/
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefUptLt..&lmvOutTabNameUptLt.{options replace=true} as
-			select
+			select distinct
 			cast(t1.prod as integer) as PROD /*Ц »ƒ продукта*/, 
 			cast(t1.location as integer) as LOCATION /*Ц »ƒ ресторана*/,
 			t1.data as DATA /*Ц ƒата прогноза или факта (мес€ц)*/,
@@ -664,7 +667,6 @@
 		proc casutil;
 		
 		promote casdata="pmix_daily" incaslib="casuser" outcaslib="mn_long";
-		save incaslib="mn_long" outcaslib="mn_long" casdata="pmix_daily" casout="pmix_daily.sashdat" replace;
 		
 		promote casdata="&lmvOutTabNamePmixLt." incaslib="&lmvOutLibrefPmixLt." outcaslib="&lmvOutLibrefPmixLt.";
 		save incaslib="&lmvOutLibrefPmixLt." outcaslib="&lmvOutLibrefPmixLt." casdata="&lmvOutTabNamePmixLt." casout="&lmvOutTabNamePmixLt..sashdat" replace;

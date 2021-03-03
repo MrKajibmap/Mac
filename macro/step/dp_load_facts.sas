@@ -25,7 +25,7 @@
 	%let etl_current_dt = %sysfunc(today());
 	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
 	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
-	%let BeginOfYear = %sysfunc(intnx(year,&etl_current_dt.,0,b));
+	%let BeginOfYear = %sysfunc(intnx(year,&etl_current_dt.,-1,b));
 	%put &=BeginOfYear;
 
 	proc casutil;
@@ -46,6 +46,7 @@
 		from (select * 
 			  from etl_ia.pbo_sales t1
 			  where sales_dt>=&BeginOfYear.
+			  and channel_cd='ALL'
 		
 		) t1
 		inner join (select  pbo_location_id, channel_cd, sales_dt, max(valid_to_dttm) as max
@@ -108,6 +109,8 @@
 				from (select * 
 					  from etl_ia.pmix_sales t1
 				 	  where sales_dt>=&BeginOfYear.
+					  and channel_cd='ALL'
+					  
 				) t1
 				inner join (select product_id, pbo_location_id, sales_dt, channel_cd, max(valid_to_dttm) as max
 						   from etl_ia.pmix_sales 
@@ -167,7 +170,7 @@
 	/* non-komp*/
 	proc fedsql sessref=casauto;
 		create table casuser.&lmvTabNmGc._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from casuser.&lmvTabNmGc. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -191,7 +194,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table casuser.&lmvTabNmPmix._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from casuser.&lmvTabNmPmix. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -215,7 +218,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table casuser.&lmvTabNmUpt._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from casuser.&lmvTabNmUpt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -239,7 +242,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table casuser.&lmvTabNmGc._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from casuser.&lmvTabNmGc. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -263,7 +266,7 @@
 
 	proc fedsql sessref=casauto;
 		create table casuser.&lmvTabNmPmix._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from casuser.&lmvTabNmPmix. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -287,7 +290,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table casuser.&lmvTabNmUpt._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from casuser.&lmvTabNmUpt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id

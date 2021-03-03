@@ -16,12 +16,16 @@
 	/* Подготовка входных данных */
 	%add_promotool_marks(mpOutCaslib=casuser,
 							mpPtCaslib=pt);
-							
+
 	proc casutil;
 	  droptable casdata="promo" incaslib="casuser" quiet;
 	  droptable casdata="promo_pbo" incaslib="casuser" quiet;
 	  droptable casdata="promo_prod" incaslib="casuser" quiet;
 	run;
+
+	data CASUSER.VAT (replace=yes);
+		set ETL_IA.VAT (where=(VALID_TO_DTTM = &ETL_SCD_FUTURE_DTTM.));
+    run;
 	
 	data CASUSER.promo (replace=yes);
 		set CASUSER.promo_enh;

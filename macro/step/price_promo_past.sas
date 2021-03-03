@@ -1,24 +1,17 @@
 %macro price_promo_past(mpOutTable=, mpBatchValue=);
 	%local lmvIterCounter
-		lmvPromoList1210
-		lmvPromoList345
-		lmvPromoList68
-		lmvPromoList7
-		lmvPboUsedNum
-		lmvPboTotalNum
-		lmvOutTableName
-		lmvOutTableCLib
-		lmvBatchValue
-		;
+			lmvPromoList1210
+			lmvPromoList345
+			lmvPromoList68
+			lmvPromoList7
+			lmvPboUsedNum
+			lmvPboTotalNum
+			lmvOutTableName
+			lmvOutTableCLib
+			lmvBatchValue
+			;
 	%let lmvBatchValue = &mpBatchValue.;
 	%member_names (mpTable=&mpOutTable, mpLibrefNameKey=lmvOutTableCLib, mpMemberNameKey=lmvOutTableName);
-	
-	%let lmvInLib=ETL_IA;
-	%let ETL_CURRENT_DT = %sysfunc(date());
-	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
-	%let lmvReportDt=&ETL_CURRENT_DT.;
-	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
-	
 	
 	%if %sysfunc(sessfound(casauto))=0 %then %do;
 		cas casauto;
@@ -28,86 +21,6 @@
 	proc casutil;  
 		droptable casdata="&lmvOutTableName" incaslib="&lmvOutTableCLib" quiet;
 	run;
-
-	/* Подготовка входных данных */
-	*%add_promotool_marks(mpIntLibref=casuser,mpExtLibref=pt);
-	%add_promotool_marks(mpOutCaslib=casuser,
-							mpPtCaslib=pt);
-							
-	proc casutil;
-	  droptable casdata="promo" incaslib="casuser" quiet;
-	  droptable casdata="promo_pbo" incaslib="casuser" quiet;
-	  droptable casdata="promo_prod" incaslib="casuser" quiet;
-	run;
-	
-	data CASUSER.promo (replace=yes);
-		/* set &lmvInLib..promo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
-		set CASUSER.promo_enh;
-	run;
-	
-	data CASUSER.promo_x_pbo (replace=yes);
-		/* set &lmvInLib..promo_x_pbo(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
-		set CASUSER.promo_pbo_enh;
-	run;
-	
-	data CASUSER.promo_x_product (replace=yes);
-		/* set &lmvInLib..promo_x_product(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.)); */
-		set casuser.promo_prod_enh;
-	run;
-
-	proc fedsql sessref=casauto noprint;
-		create table casuser.promo {options replace=true} as 
-		select CHANNEL_CD
-		,PROMO_ID
-		,PROMO_GROUP_ID
-		,PROMO_MECHANICS
-		,PROMO_NM
-		,SEGMENT_ID
-		,PROMO_PRICE_AMT
-		,NP_GIFT_PRICE_AMT
-		,start_dt
-		,end_dt
-		from casuser.promo
-		where start_dt is not null and end_dt is not null
-		;
-	quit;
-
-	proc fedsql sessref=casauto noprint;
-		create table casuser.promo_pbo {options replace=true} as 
-		select PBO_LOCATION_ID,PROMO_ID
-		from casuser.promo_X_PBO
-		;
-	quit;
-
-	proc fedsql sessref=casauto noprint;
-		create table casuser.promo_prod {options replace=true} as 
-		select GIFT_FLAG,OPTION_NUMBER,PRODUCT_ID,PRODUCT_QTY,PROMO_ID
-		from casuser.promo_X_PRODUCT
-		;
-	quit;
-	
-		proc casutil;
-	  droptable casdata="price" incaslib="casuser" quiet;
-	run;
-	
-	data CASUSER.PRICE (replace=yes drop=valid_from_dttm valid_to_dttm);
-		set ETL_IA.PRICE(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
-	run;
-
-	proc fedsql sessref=casauto noprint;
-		create table casuser.PRICE{options replace=true} as
-		select 
-		PRODUCT_ID
-		,PBO_LOCATION_ID
-		,PRICE_TYPE
-		,NET_PRICE_AMT
-		,GROSS_PRICE_AMT
-		,START_DT
-		,END_DT
-		from casuser.PRICE
-		;
-	quit;
-	
 	
 	/* Джойн с двумя справочниками. Создание промо-разметки CHANNEL_CD - SKU - ПБО - период- Флаг_промо */
 	proc fedsql sessref=casauto noprint;

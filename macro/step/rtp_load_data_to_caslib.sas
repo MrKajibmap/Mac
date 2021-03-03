@@ -37,16 +37,16 @@
 			lmvScoreEndDate
 			;
 			
+
+	
 	%let lmvInLib=ETL_IA;
-	%let etl_current_dt = %sysfunc(today());
-	%let ETL_CURRENT_DTTM = %sysfunc(datetime());
 	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
 	%let lmvStartDateScore =%sysfunc(intnx(year,&etl_current_dt.,-1,s));
 	%let lmvWorkCaslib = &mpWorkCaslib.;
 	/*
 	%let lmvStartDate = %eval(%sysfunc(intnx(year,&etl_current_dt.,-2,s))-91);
 */
-	%let lmvStartDate = %eval(%sysfunc(intnx(month,&etl_current_dt.,-15,s))-91);
+	%let lmvStartDate = %eval(%sysfunc(intnx(month,&etl_current_dt.,-10,s))-91);
 	%let lmvEndDate = &VF_HIST_END_DT_SAS.;
 	%let lmvScoreEndDate = %sysfunc(intnx(day,&VF_HIST_END_DT_SAS.,91,s));
 	
@@ -188,7 +188,7 @@
 	/* Подготовка таблицы с продажами (на время перезаливки таблицы ETL_IA.PMIX_SALES данные берем напрямую из IA) */
 	/* data CASUSER.pmix_sales(replace=yes  drop=valid_from_dttm valid_to_dttm);
 			set &lmvInLib..pmix_sales(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-			and sales_dt<=&lmvScoreEndDate. and sales_dt>=&lmvStartDate.));
+			and sales_dt<=&lmvEndDate. and sales_dt>=&lmvStartDate.));
 	run; 
 
 	proc casutil; 
@@ -196,7 +196,6 @@
 		promote casdata="pmix_sales" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 	run;
 */
-	
 			
 			proc sql noprint;
 				create table work.pmix_full as 
@@ -242,9 +241,9 @@
 	  droptable casdata="price_ml" incaslib="casuser" quiet;
 	run;
 
-	 data CASUSER.price_ml (replace=yes  drop=valid_from_dttm valid_to_dttm);
+	data CASUSER.price_ml (replace=yes  drop=valid_from_dttm valid_to_dttm);
 			set &lmvInLib..price(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-			and end_dt<=&lmvScoreEndDate. and start_dt>=&lmvStartDate.));
+			/* and end_dt<=&lmvEndDate. and start_dt>=&lmvStartDate. */));
 	run;
 
 	proc casutil;
@@ -259,7 +258,7 @@
 
 	data CASUSER.pbo_close_period (replace=yes  drop=valid_from_dttm valid_to_dttm);
 			set &lmvInLib..pbo_close_period(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.
-				and end_dt<=&lmvScoreEndDate. and start_dt>=&lmvStartDate.));
+				and end_dt<=&lmvEndDate. and start_dt>=&lmvStartDate.));
 	run;
 
 	/* заполняем пропуски в end_dt */

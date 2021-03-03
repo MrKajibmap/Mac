@@ -54,7 +54,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefUptLt..&lmvOutTabNameUptLt._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefUptLt..&lmvOutTabNameUptLt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -86,7 +86,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefPmixLt..&lmvOutTabNamePmixLt._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefPmixLt..&lmvOutTabNamePmixLt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -117,7 +117,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefGcLt..&lmvOutTabNameGcLt._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefGcLt..&lmvOutTabNameGcLt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -148,7 +148,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefUptSt..&lmvOutTabNameUptSt._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefUptSt..&lmvOutTabNameUptSt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -172,7 +172,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -196,7 +196,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefGcSt..&lmvOutTabNameGcSt._nonkomp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefGcSt..&lmvOutTabNameGcSt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -221,7 +221,7 @@
 	quit;
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefUptLt..&lmvOutTabNameUptLt._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefUptLt..&lmvOutTabNameUptLt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -251,7 +251,7 @@
 	quit;
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefPmixLt..&lmvOutTabNamePmixLt._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefPmixLt..&lmvOutTabNamePmixLt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -279,7 +279,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefGcLt..&lmvOutTabNameGcLt._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefGcLt..&lmvOutTabNameGcLt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -307,7 +307,7 @@
 	quit;
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefUptSt..&lmvOutTabNameUptSt._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefUptSt..&lmvOutTabNameUptSt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -359,7 +359,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id
@@ -369,7 +369,7 @@
 	
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp_qnt{options replace=true} as
-		select LOCATION, PROD, DATA, CURRENCY, ORG, 
+		select distinct LOCATION, PROD, DATA, CURRENCY, ORG, 
 				BASE_FCST_QNT_DAY, PROMO_FCST_QNT_DAY, TOTAL_FCST_QNT_DAY, OVERRIDED_FCST_QNT_DAY, OVERRIDE_TRIGGER_QNT_DAY
 		from  &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt. t1
 		;
@@ -390,7 +390,7 @@
 	
 	proc fedsql sessref=casauto;
 			create table &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp_rur{options replace=true} as
-			select LOCATION, PROD, DATA, CURRENCY, ORG, 
+			select distinct LOCATION, PROD, DATA, CURRENCY, ORG, 
 				BASE_FCST_RUR_DAY,OVERRIDED_FCST_RUR_DAY,PROMO_FCST_RUR_DAY,TOTAL_FCST_RUR_DAY,AVG_PRICE
 			from  &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp t1
 	;
@@ -407,12 +407,94 @@
 	quit;
 	/* TEMP */
 
+
+	/* Для первого месяца */
+	proc casutil;
+		droptable casdata="&lmvOutTabNamePmixSt._komp_rur" incaslib="&lmvOutLibrefPmixSt." quiet;
+	quit;
+	
+	proc fedsql sessref=casauto;
+		create table &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp1{options replace=true} as
+		select distinct t1.* 
+		from &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt. t1
+		inner join casuser.komp_matrix t2
+			on t1.LOCATION = t2.pbo_location_id
+			and t2.komp = 1
+		where DATA <= INTNX( 'MONTH', today(), 1, 'SAMEDAY')
+		;
+	quit;	
+
+	proc casutil;
+			promote casdata="&lmvOutTabNamePmixSt._komp1" incaslib="&lmvOutLibrefPmixSt." outcaslib="&lmvOutLibrefPmixSt.";
+	quit;
+
+
+	%dp_export_csv(mpInput=&lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp1
+					, mpTHREAD_CNT=30
+					, mpPath=&lmvPathOut.);
+	proc casutil;
+		droptable casdata="&lmvOutTabNamePmixSt._komp1" incaslib="&lmvOutLibrefPmixSt." quiet;
+	quit;
+	
+	/* Для второго месяца */
+
+	proc fedsql sessref=casauto;
+		create table &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp2{options replace=true} as
+		select distinct t1.* 
+		from &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt. t1
+		inner join casuser.komp_matrix t2
+			on t1.LOCATION = t2.pbo_location_id
+			and t2.komp = 1
+		where DATA > INTNX( 'MONTH', today(), 1, 'SAMEDAY')
+		and DATA <= INTNX( 'MONTH', today(), 2, 'SAMEDAY')
+		;
+	quit;	
+
+	proc casutil;
+			promote casdata="&lmvOutTabNamePmixSt._komp2" incaslib="&lmvOutLibrefPmixSt." outcaslib="&lmvOutLibrefPmixSt.";
+	quit;
+
+	%dp_export_csv(mpInput=&lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp2
+					, mpTHREAD_CNT=30
+					, mpPath=&lmvPathOut.);
+	proc casutil;
+		droptable casdata="&lmvOutTabNamePmixSt._komp2" incaslib="&lmvOutLibrefPmixSt." quiet;
+	quit;
+	
+	/* Для третьего месяца */
+
+	proc fedsql sessref=casauto;
+		create table &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp3{options replace=true} as
+		select distinct t1.* 
+		from &lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt. t1
+		inner join casuser.komp_matrix t2
+			on t1.LOCATION = t2.pbo_location_id
+			and t2.komp = 1
+		where DATA > INTNX( 'MONTH', today(), 2, 'SAMEDAY')
+		;
+	quit;	
+
+	proc casutil;
+			promote casdata="&lmvOutTabNamePmixSt._komp3" incaslib="&lmvOutLibrefPmixSt." outcaslib="&lmvOutLibrefPmixSt.";
+	quit;
+
+	%dp_export_csv(mpInput=&lmvOutLibrefPmixSt..&lmvOutTabNamePmixSt._komp3
+					, mpTHREAD_CNT=30
+					, mpPath=&lmvPathOut.);
+	proc casutil;
+		droptable casdata="&lmvOutTabNamePmixSt._komp3" incaslib="&lmvOutLibrefPmixSt." quiet;
+	quit;
+	
+	
+	
+	
+	
 	proc casutil;
 		droptable casdata="&lmvOutTabNameGcSt._komp" incaslib="&lmvOutLibrefGcSt." quiet;
 	quit;
 	proc fedsql sessref=casauto;
 		create table &lmvOutLibrefGcSt..&lmvOutTabNameGcSt._komp{options replace=true} as
-		select t1.* 
+		select distinct t1.* 
 		from &lmvOutLibrefGcSt..&lmvOutTabNameGcSt. t1
 		inner join casuser.komp_matrix t2
 			on t1.LOCATION = t2.pbo_location_id

@@ -1,4 +1,6 @@
+
 %macro price_regular_past(mpOutTable=, mpBatchValue=);
+
 	%local lmvPromoList
 		   lmvPromoProductIds
 		   lmvIterCounter
@@ -7,8 +9,9 @@
 		   lmvOutTableName
 		   lmvOutTableCLib
 		   lmvBatchValue
+		   lmvCheckNobs
 		;
-		
+
 	%member_names (mpTable=&mpOutTable, mpLibrefNameKey=lmvOutTableCLib, mpMemberNameKey=lmvOutTableName);
 	
 	%let lmvBatchValue = &mpBatchValue.;
@@ -38,57 +41,63 @@
 							8750, 8751, 8752, 8753, 8756, 8757, 8758, 8759);
 
 	/* Джойн со справочниками. Создание промо-разметки CHANNEL_CD - SKU - ПБО - период- Флаг_промо */
+
 	proc fedsql sessref=casauto noprint;
-		create table casuser.PROMO_FILT_SKU_PBO{options replace=true} as
-			select t1.CHANNEL_CD,
-				t1.PROMO_ID,
-				t3.PRODUCT_ID,
-				t2.PBO_LOCATION_ID,
+		create table CASUSER.PROMO_FILT_SKU_PBO{options replace=true} as
+			select t1.channel_cd,
+				t1.promo_id,
+				t3.product_id,
+				t2.pbo_location_id,
 				t1.start_dt,
 				t1.end_dt,
-				t1.PROMO_MECHANICS,
+				t1.promo_mechanics,
 				1 as promo_flag
-		from casuser.PROMO t1
+		from CASUSER.PROMO t1
 		inner join casuser.PROMO_PBO t2
-			on t1.PROMO_ID = t2.PROMO_ID
-		inner join casuser.PROMO_PROD t3
-			on t1.PROMO_ID = t3.PROMO_ID
-		where t1.PROMO_MECHANICS in &lmvPromoList
-			and t1.CHANNEL_CD = 'ALL'
+			on t1.promo_id = t2.promo_id
+		inner join CASUSER.PROMO_PROD t3
+			on t1.promo_id = t3.promo_id
+		where t1.promo_mechanics in &lmvPromoList
+			and t1.channel_cd = 'ALL'
 		;
 	quit;
 
 	/* Фильтрация цен от введенных промо товаров*/
 	proc fedsql sessref=casauto noprint;
-		create table casuser.PRICE_FILT{options replace=true} as
-			select t1.*
-		from casuser.PRICE t1
-		where t1.PRODUCT_ID not in &lmvPromoProductIds
+		create table CASUSER.PRICE_FILT{options replace=true} as
+			select t1.product_id,
+                t1.pbo_location_id,
+                t1.start_dt,
+                t1.end_dt,
+                t1.net_price_amt,
+                t1.gross_price_amt
+		from CASUSER.PRICE t1
+		where t1.product_id not in &lmvPromoProductIds
 		;
 	quit;
 
 	/* Создание пустой таблицы айдишников ПБО, в которой будут храниться уже посчитанные */
-	data CASUSER.PBO_USED (keep=PBO_LOCATION_ID used_flag);
+	data CASUSER.PBO_USED(keep=pbo_location_id used_flag);
 		set CASUSER.PRICE_FILT;
-		where PBO_LOCATION_ID < -1000;
+		where pbo_location_id < -1000;
 		used_flag = 1;
 	run;
 
 	proc fedsql sessref=casauto noprint;
-		create table CASUSER.pbo_list_tmp{options replace=true} as
-			select distinct t1.PBO_LOCATION_ID
+		create table CASUSER.PBO_LIST_TMP{options replace=true} as
+			select distinct t1.pbo_location_id
 			from CASUSER.PRICE_FILT t1
 		;
 	quit;
 
 	data _NULL_;
 		if 0 then set CASUSER.PBO_USED nobs=n;
-		call symputx('lmvPboUsedNum',n);
+		call symputx('lmvPboUsedNum', n);
 		stop;
 	run;
 	data _NULL_;
-		if 0 then set CASUSER.pbo_list_tmp nobs=n;
-		call symputx('lmvPboTotalNum',n);
+		if 0 then set CASUSER.PBO_LIST_TMP nobs=n;
+		call symputx('lmvPboTotalNum', n);
 		stop;
 	run;
 	%let lmvIterCounter = 1;
@@ -97,45 +106,50 @@
 
 		/* Создание батча PBO start */
 		proc fedsql sessref=casauto noprint;
-			create table CASUSER.pbo_list{options replace=true} as
-				select distinct t1.PBO_LOCATION_ID
-				from CASUSER.PRICE_FILT t1
+			create table CASUSER.PBO_LIST{options replace=true} as
+				select t1.pbo_location_id
+				from CASUSER.PBO_LIST_TMP t1
 				left join CASUSER.PBO_USED t2
-					on (t1.PBO_LOCATION_ID=t2.PBO_LOCATION_ID)
+					on t1.pbo_location_id=t2.pbo_location_id
 				where t2.used_flag = . /*исключение уже посчитанных*/
 			;
 		quit;
 		data CASUSER.PBO_LIST_BATCH;
-			set CASUSER.pbo_list(obs=&lmvBatchValue.);
+			set CASUSER.PBO_LIST(obs=&lmvBatchValue.);
 			used_flag = 1;
 		run;
-		
+
+		proc casutil;droptable casdata="PBO_LIST" incaslib="CASUSER" quiet;run;
+
 		/* Добавление в список посчитанных айдишников ПБО */
-		data CASUSER.PBO_USED;
-			set CASUSER.PBO_USED CASUSER.PBO_LIST_BATCH;
+		data CASUSER.PBO_USED(append=yes);
+			set CASUSER.PBO_LIST_BATCH;
 		run;
 
 		proc fedsql sessref=casauto noprint;
-			create table casuser.PROMO_FILT_SKU_PBO_BATCH{options replace=true} as
+			create table CASUSER.PROMO_FILT_SKU_PBO_BATCH{options replace=true} as
 				select t1.*
-			from casuser.PROMO_FILT_SKU_PBO t1
+			from CASUSER.PROMO_FILT_SKU_PBO t1
 			inner join CASUSER.PBO_LIST_BATCH t2
-				on (t1.PBO_LOCATION_ID=t2.PBO_LOCATION_ID)
+				on t1.pbo_location_id=t2.pbo_location_id
 			;
 		quit;
+
 		proc fedsql sessref=casauto noprint;
 			create table CASUSER.PRICE_BATCH{options replace=true} as
 				select t1.*
 			from CASUSER.PRICE_FILT t1
 			inner join CASUSER.PBO_LIST_BATCH t2
-				on (t1.PBO_LOCATION_ID=t2.PBO_LOCATION_ID)
+				on t1.pbo_location_id=t2.pbo_location_id
 			;
 		quit;
+
+        proc casutil;droptable casdata="PBO_LIST_BATCH" incaslib="CASUSER" quiet;run;
 		/* Создание батча PBO end */
 		
 		
 		/* Переход от start_dt end_dt интеревалов к подневному списку в ПРОМО разметке*/
-		data casuser.PROMO_FILT_SKU_PBO_BATCH_DAYS(rename=(start_dt=day_dt) keep=CHANNEL_CD PBO_LOCATION_ID PRODUCT_ID PROMO_ID PROMO_MECHANICS PROMO_FLAG start_dt);
+		data CASUSER.PROMO_FILT_SKU_PBO_BATCH_DAYS(rename=(start_dt=day_dt) drop=end_dt);
 			set CASUSER.PROMO_FILT_SKU_PBO_BATCH;
 			output;
 			do while ((start_dt < end_dt) and (start_dt < &VF_HIST_END_DT_SAS.));
@@ -143,9 +157,11 @@
 				output;
 			end;
 		run;
-		
+
+        proc casutil;droptable casdata="PROMO_FILT_SKU_PBO_BATCH" incaslib="CASUSER" quiet;run;
+
 		/* Переход от start_dt end_dt интеревалов к подневному списку в ФАКТИЧЕСКИХ ценах */
-		data casuser.PRICE_BATCH_DAYS(rename=(start_dt=day_dt) keep=product_id pbo_location_id start_dt net_price_amt gross_price_amt);
+		data CASUSER.PRICE_BATCH_DAYS(rename=(start_dt=day_dt) drop=end_dt);
 			set CASUSER.PRICE_BATCH;
 			output;
 			do while ((start_dt < end_dt) and (start_dt < &VF_HIST_END_DT_SAS.));
@@ -153,6 +169,8 @@
 				output;
 			end;
 		run;
+
+        proc casutil;droptable casdata="PRICE_BATCH" incaslib="CASUSER" quiet;run;
 		
 		/* Джойн с промо-разметкой и проставление миссингов на цены с промо-днем = 1; замена на миссинги цены во время промо*/
 		proc fedsql sessref=casauto noprint;
@@ -171,11 +189,13 @@
 					   t2.promo_flag
 			from CASUSER.PRICE_BATCH_DAYS t1
 			left join CASUSER.PROMO_FILT_SKU_PBO_BATCH_DAYS t2
-				on (t1.PBO_LOCATION_ID = t2.PBO_LOCATION_ID
+				on t1.pbo_location_id = t2.pbo_location_id
 					and t1.product_id = t2.product_id
-					and t1.day_dt = t2.day_dt)
+					and t1.day_dt = t2.day_dt
 			;
 		quit;
+
+        proc casutil;droptable casdata="PROMO_FILT_SKU_PBO_BATCH_DAYS" incaslib="CASUSER" quiet;run;
 		
 		/* Продление каждого ВР без лидирующих и хвостовых заполнений, т.е. trimId="BOTH" */
 		
@@ -184,68 +204,82 @@
 			series={{name="net_price_amt_new", Acc="sum", setmiss="PREV"},
 			{name="gross_price_amt_new", Acc="sum", setmiss="PREV"}}
 			tEnd= "&VF_FC_AGG_END_DT"
-			table={caslib="casuser",name="PRICE_BATCH_DAYS_1", groupby={"PBO_LOCATION_ID","product_id"},
+			table={caslib="CASUSER" ,name="PRICE_BATCH_DAYS_1", groupby={"pbo_location_id","product_id"},
 			where="day_dt<=&VF_HIST_END_DT_SAS"}
 			timeId="day_dt"
 			interval="days"
 			trimId="BOTH"
-			casOut={caslib="casuser",name="PRICE_BATCH_DAYS_2", replace=True}
+			casOut={caslib="CASUSER",name="PRICE_BATCH_DAYS_2", replace=True}
 			;
-			run;
+		run;
 		quit;
-		
+
+	    proc casutil;droptable casdata="PRICE_BATCH_DAYS_1" incaslib="CASUSER" quiet;run;
+
 		/* Обработка случая, когда товар продаётся только во время промо: в этом случае регулярная цена = фактической цене START*/
 		proc fedsql sessref=casauto noprint;
 			create table CASUSER.ALL_DAYS_PROMO{options replace=true} as
 				select t2.product_id,
 					t2.pbo_location_id,
 					1 as all_days_promo_flg
-			from
-				(select product_id,
-					   pbo_location_id,
-					sum(net_price_amt_new) as net_price_amt_sum,
-					sum(gross_price_amt_new) as gross_price_amt_sum
-				from casuser.PRICE_BATCH_DAYS_2
-				group by product_id,
-						 pbo_location_id) as t2
-			where (t2.gross_price_amt_sum = .) or (t2.net_price_amt_sum = .)
+			    from
+    				(select product_id,
+    					pbo_location_id,
+    					sum(net_price_amt_new) as net_price_amt_sum,
+    					sum(gross_price_amt_new) as gross_price_amt_sum
+    				from CASUSER.PRICE_BATCH_DAYS_2
+    				group by product_id,
+    					pbo_location_id) as t2
+			    where t2.gross_price_amt_sum = . 
+                    or t2.net_price_amt_sum = .
 			;
 		quit;
 		proc fedsql sessref=casauto noprint;
-			create table casuser.ALL_DAYS_PROMO_1{options replace=true} as
+			create table CASUSER.ALL_DAYS_PROMO_1{options replace=true} as
 				select t1.product_id,
 					t1.pbo_location_id,
 					t1.day_dt,
 					t1.net_price_amt as net_price_amt_new,
 					t1.gross_price_amt as gross_price_amt_new
-			from casuser.PRICE_BATCH_DAYS t1
-			inner join casuser.ALL_DAYS_PROMO t2
-				on (t1.product_id = t2.product_id and
-					t1.pbo_location_id = t2.pbo_location_id)
+    			from CASUSER.PRICE_BATCH_DAYS t1
+    			inner join CASUSER.ALL_DAYS_PROMO t2
+    				on t1.product_id = t2.product_id 
+                        and t1.pbo_location_id = t2.pbo_location_id
 			;
 		quit;
+
+        proc casutil;droptable casdata="PRICE_BATCH_DAYS" incaslib="CASUSER" quiet;run;
+
 		proc fedsql sessref=casauto noprint;
-			create table casuser.PRICE_BATCH_DAYS_3{options replace=true} as
+			create table CASUSER.PRICE_BATCH_DAYS_3{options replace=true} as
 				select t1.*
-			from casuser.PRICE_BATCH_DAYS_2 t1
-			left join casuser.ALL_DAYS_PROMO t2
-				on (t1.product_id = t2.product_id
-					and t1.pbo_location_id = t2.pbo_location_id)
-			where t2.all_days_promo_flg = .
+    			from CASUSER.PRICE_BATCH_DAYS_2 t1
+    			left join CASUSER.ALL_DAYS_PROMO t2
+    				on t1.product_id = t2.product_id
+    					and t1.pbo_location_id = t2.pbo_location_id
+    			where t2.all_days_promo_flg = .
 			;
 		quit;
-		data casuser.PRICE_BATCH_DAYS_4;
-			set casuser.PRICE_BATCH_DAYS_3
-				casuser.ALL_DAYS_PROMO_1;
+
+        proc casutil;droptable casdata="PRICE_BATCH_DAYS_2" incaslib="CASUSER" quiet;run;
+        proc casutil;droptable casdata="ALL_DAYS_PROMO" incaslib="CASUSER" quiet;run;
+
+		data CASUSER.PRICE_BATCH_DAYS_4;
+			set CASUSER.PRICE_BATCH_DAYS_3
+				CASUSER.ALL_DAYS_PROMO_1;
 		run;
+
+        proc casutil;droptable casdata="ALL_DAYS_PROMO_1" incaslib="CASUSER" quiet;run;
+        proc casutil;droptable casdata="PRICE_BATCH_DAYS_3" incaslib="CASUSER" quiet;run;
+        
 		/* Обработка случая, когда товар продаётся только во время промо: в этом случае регулярная цена = фактической цене END*/
 		
 		
 		/* Обработка случая, когда товар вводится в промо и протягивать нечем, поэтому регулярная цена равна миссинг. В этом случае, рег цена первой немиссинговой факт цене START*/
 		
 		/*Создание справочника с минимальной датой продажи и немиссинговой ценой */
-		data casuser.PRICE_BATCH_DAYS_4_1;
-			set casuser.PRICE_BATCH_DAYS_4;
+		data CASUSER.PRICE_BATCH_DAYS_4_1;
+			set CASUSER.PRICE_BATCH_DAYS_4;
 			by pbo_location_id product_id day_dt;
 			where (net_price_amt_new is not missing) and (gross_price_amt_new is not missing);
 			if first.product_id then do;
@@ -258,37 +292,37 @@
 		proc fedsql sessref=casauto noprint;
 			create table CASUSER.PRICE_BATCH_DAYS_4_2{options replace=true} as
 				select t1.product_id,
-					   t1.pbo_location_id,
-					   t1.day_dt,
-					   t1.net_price_amt_new,
-					   t1.gross_price_amt_new,
-					   t2.first_nonmiss_net_price,
-						(case
-							when (t1.net_price_amt_new is missing) and (t1.day_dt < t2.day_dt) then t2.first_nonmiss_net_price
-							else t1.net_price_amt_new
-						end) as net_price_amt,
-						(case
-							when (t1.gross_price_amt_new is missing) and (t1.day_dt < t2.day_dt) then t2.first_nonmiss_gross_price
-							else t1.gross_price_amt_new
-						end) as gross_price_amt
-			from CASUSER.PRICE_BATCH_DAYS_4 t1
-			left join CASUSER.PRICE_BATCH_DAYS_4_1 t2
-				on (t1.PBO_LOCATION_ID = t2.PBO_LOCATION_ID
-					and t1.product_id = t2.product_id)
+					t1.pbo_location_id,
+					t1.day_dt,
+					t1.net_price_amt_new,
+					t1.gross_price_amt_new,
+					t2.first_nonmiss_net_price,
+					(case
+						when (t1.net_price_amt_new is missing) and (t1.day_dt < t2.day_dt) then t2.first_nonmiss_net_price
+						else t1.net_price_amt_new
+					end) as net_price_amt,
+					(case
+						when (t1.gross_price_amt_new is missing) and (t1.day_dt < t2.day_dt) then t2.first_nonmiss_gross_price
+						else t1.gross_price_amt_new
+					end) as gross_price_amt
+    			from CASUSER.PRICE_BATCH_DAYS_4 t1
+    			left join CASUSER.PRICE_BATCH_DAYS_4_1 t2
+    				on t1.pbo_location_id = t2.PBO_LOCATION_ID
+    					and t1.product_id = t2.product_id
 			;
 		quit;
+
+        proc casutil;droptable casdata="PRICE_BATCH_DAYS_4" incaslib="CASUSER" quiet;run;
+        proc casutil;droptable casdata="PRICE_BATCH_DAYS_4_1" incaslib="CASUSER" quiet;run;
 		
 		/* Обработка случая, когда товар вводится в промо и протягивать нечем, поэтому регулярная цена равна миссинг. В этом случае, рег цена первой немиссинговой факт цене END*/
 		
 		/* Идентификация скачков более чем на 5% и их замена на предыдущее значение цены */
-		data casuser.PRICE_BATCH_DAYS_5(keep=product_id PBO_LOCATION_ID day_dt net_price_amt gross_price_amt);
-			set casuser.PRICE_BATCH_DAYS_4_2;
-			by PBO_LOCATION_ID product_id day_dt;
+		data CASUSER.PRICE_BATCH_DAYS_5(keep=product_id PBO_LOCATION_ID day_dt net_price_amt gross_price_amt);
+			set CASUSER.PRICE_BATCH_DAYS_4_2;
+			by pbo_location_id product_id day_dt;
 			retain prev_net;
 			retain prev_gross;
-		
-			net_price_old = net_price_amt;
-			gross_price_old = gross_price_amt;
 		
 			if first.product_id then do;
 				prev_net = coalesce(net_price_amt, -1000);
@@ -304,81 +338,234 @@
 			prev_net = max(prev_net, coalesce(net_price_amt, 0));
 			prev_gross = max(prev_gross, coalesce(gross_price_amt, 0));
 		run;
+
+        proc casutil;droptable casdata="PRICE_BATCH_DAYS_4_2" incaslib="CASUSER" quiet;run;
 		
 		/* Округление регулярных цен до целого числа и фильтрация дат по открытию или полному закрытию ПБО.*/
 
 		proc fedsql sessref=casauto noprint;
 			create table CASUSER.PRICE_BATCH_DAYS_6{options replace=true} as
 				select t1.product_id,
-					   t1.PBO_LOCATION_ID,
-					   t1.day_dt,
-					   round(t1.net_price_amt) as net_price_amt,
-					   round(t1.gross_price_amt) as gross_price_amt
-			from CASUSER.PRICE_BATCH_DAYS_5 t1
-			left join CASUSER.PBO_DICTIONARY t2
-				on t1.PBO_LOCATION_ID=t2.PBO_LOCATION_ID
-			where t2.A_OPEN_DATE is not null and 
-				t1.day_dt between t2.A_OPEN_DATE and coalesce(t2.A_CLOSE_DATE, date%str(%')&VF_FC_AGG_END_DT.%str(%')) 
+					t1.pbo_location_id,
+					t1.day_dt,
+					t2.a_open_date,
+					round(t1.net_price_amt) as net_price_amt,
+					round(t1.gross_price_amt) as gross_price_amt
+    			from CASUSER.PRICE_BATCH_DAYS_5 t1
+    			left join CASUSER.PBO_DICTIONARY t2
+    				on t1.pbo_location_id=t2.pbo_location_id
+    			where t2.a_open_date is not null
+                    and t1.day_dt between t2.a_open_date
+                    and coalesce(t2.a_close_date, date%str(%')&VF_FC_AGG_END_DT.%str(%')) 
 			;
 		quit;
 		
+        proc casutil;droptable casdata="PRICE_BATCH_DAYS_5" incaslib="CASUSER" quiet;run;
 		
-		/* Переход от подневной гранулярности к периодной */
-		
-		data CASUSER.REG_INTERVALS(rename=(price_net=net_price_amt price_gro=gross_price_amt));
-			set CASUSER.PRICE_BATCH_DAYS_6;
-			by pbo_location_id product_id day_dt;
-			keep pbo_location_id product_id start_dt end_dt price_net price_gro;
-			format start_dt end_dt date9.;
-			retain start_dt end_dt price_net price_gro l_gross_price;
-			
-			l_gross_price = lag(gross_price_amt);
-			l_day_dt = lag(day_dt);
-			
-			/*первое наблюдение в ряду - сбрасываем хар-ки интервала*/
-			if first.product_id then do;
-				start_dt = day_dt;
-				end_dt =.;
-				price_net = net_price_amt;
-				price_gro = gross_price_amt;
-				l_gross_price = .z;
-				l_day_dt = .;
-			end;
-			
-			/*сбрасываем текущий интервал, готовим следующий*/
-			if (gross_price_amt ne l_gross_price or l_day_dt ne day_dt-1) and not first.product_id then do;
-				end_dt = l_day_dt;
-				output;
-				start_dt = day_dt;
-				end_dt = .;
-				price_net = net_price_amt;
-				price_gro = gross_price_amt;
-			end;
-			if last.product_id then do;
-				end_dt = day_dt;
-				output;
-			end;
+		data _NULL_;
+			if 0 then set CASUSER.PRICE_BATCH_DAYS_6 nobs=n;
+			call symputx('lmvCheckNobs',n);
+			stop;
 		run;
+		
+		%if &lmvCheckNobs. > 0 %then %do;
+			
+			/* Переход от подневной гранулярности к периодной */
 
-		/* 	Накопление результативной таблицы */
-		%if &lmvIterCounter. = 1 %then %do;
-			data CASUSER.&lmvOutTableName;
+			data CASUSER.REG_INTERVALS(rename=(price_net=net_price_amt price_gro=gross_price_amt));
+				set CASUSER.PRICE_BATCH_DAYS_6;
+				by pbo_location_id product_id a_open_date day_dt;
+				keep pbo_location_id product_id a_open_date start_dt end_dt price_net price_gro;
+				format start_dt end_dt date9.;
+				retain start_dt end_dt price_net price_gro l_gross_price;
+				
+				l_gross_price = lag(gross_price_amt);
+				l_day_dt = lag(day_dt);
+				
+				/*первое наблюдение в ряду - сбрасываем хар-ки интервала*/
+				if first.product_id then do;
+					start_dt = day_dt;
+					end_dt =.;
+					price_net = net_price_amt;
+					price_gro = gross_price_amt;
+					l_gross_price = .z;
+					l_day_dt = .;
+				end;
+				
+				/*сбрасываем текущий интервал, готовим следующий*/
+				if (gross_price_amt ne l_gross_price or l_day_dt ne day_dt-1) and not first.product_id then do;
+					end_dt = l_day_dt;
+					output;
+					start_dt = day_dt;
+					end_dt = .;
+					price_net = net_price_amt;
+					price_gro = gross_price_amt;
+				end;
+				if last.product_id then do;
+					end_dt = day_dt;
+					output;
+				end;
+			run;
+
+			proc casutil;droptable casdata="PRICE_BATCH_DAYS_6" incaslib="CASUSER" quiet;run;
+			
+			data WORK.REG_INTERVALS;
 				set CASUSER.REG_INTERVALS;
 			run;
-		%end;
-		%else %do;
-			data CASUSER.&lmvOutTableName;
-				set CASUSER.&lmvOutTableName
-					CASUSER.REG_INTERVALS;
+			
+			proc casutil;droptable casdata="REG_INTERVALS" incaslib="CASUSER" quiet;run;
+			
+			/*Обработка неоцифрованных промо во время открытия ПБО START*/
+			proc sort data=WORK.REG_INTERVALS;
+				by pbo_location_id a_open_date product_id start_dt end_dt;
 			run;
+			
+			proc expand data=WORK.REG_INTERVALS out=CASUSER.REG_INTERVALS_1;
+				convert gross_price_amt = lead_gross_price /transformout = (lead 1);
+				convert start_dt = lead_start_dt /transformout = (lead 1);
+				by pbo_location_id a_open_date product_id;
+			run;
+
+			proc sql;drop table WORK.REG_INTERVALS;quit;  
+
+			data CASUSER.REG_INTERVALS_2(drop=a_open_date lead_gross_price lead_start_dt);
+				set CASUSER.REG_INTERVALS_1;
+				by pbo_location_id product_id start_dt end_dt;
+				retain promo_open_flag;
+
+				if  start_dt = a_open_date and
+					end_dt - start_dt < 6 and
+					missing(gross_price_amt) = 0 and
+					missing(lead_gross_price) = 0 and
+					missing(lead_start_dt) = 0 and
+					intnx('day', lead_start_dt, -1) = end_dt and
+					gross_price_amt < lead_gross_price * 0.95
+					
+				then promo_open_flag = 1;
+						
+				/*Сдвигаем начало интервала на дату открытия ПБО.*/
+				if 'TIME'n = 1 and promo_open_flag = 1 then do;
+					start_dt = a_open_date;
+					promo_open_flag = .;
+				end;
+			run;
+
+			proc casutil;droptable casdata="REG_INTERVALS_1" incaslib="CASUSER" quiet;run;
+			
+			data WORK.REG_INTERVALS_3(drop='TIME'n);
+				set CASUSER.REG_INTERVALS_2;
+				
+				/*Убираем интервалы, которые были перекрыты в предыдущем степе*/
+				if 'TIME'n = 0 and promo_open_flag = 1 then delete;
+			run;
+
+			proc casutil;droptable casdata="REG_INTERVALS_2" incaslib="CASUSER" quiet;run;
+			
+			/*Обработка неоцифрованных промо во время открытия ПБО END*/
+			
+			/*Обработка колебаний цен вниз окном. Если есть скачки кратковременные скачки вниз, 
+				а потом возвращение на прежнюю цену, то скачок цены игнорируется START*/
+			proc sort data=WORK.REG_INTERVALS_3(drop=promo_open_flag);
+				by pbo_location_id product_id start_dt end_dt;
+			run;
+
+			proc expand data=WORK.REG_INTERVALS_3 out=CASUSER.REG_INTERVALS_4;
+				convert gross_price_amt = lag_gross_price /transformout = (lag 1);
+				convert gross_price_amt = lead_gross_price /transformout = (lead 1);
+				by pbo_location_id product_id;
+			run;
+
+			proc sql;drop table WORK.REG_INTERVALS_3;quit;
+
+			data CASUSER.REG_INTERVALS_5;
+				set CASUSER.REG_INTERVALS_4;
+				by pbo_location_id product_id start_dt end_dt;
+				retain change_price_flag;
+				
+				if first.product_id then change_price_flag = 0;
+				
+				if missing(lag_gross_price) = 0 and 
+				   missing(lead_gross_price) = 0 and
+				   change_price_flag = 0 and 
+				   gross_price_amt ne lag_gross_price and
+				   lag_gross_price - lead_gross_price < 0.0001 and
+				   end_dt - start_dt le 3
+				   
+				then do;
+				   change_price_flag = 1;
+				   gross_price_amt = lag_gross_price;
+				end;
+				else change_price_flag = 0;
+			run;
+
+			proc casutil;droptable casdata="REG_INTERVALS_4" incaslib="CASUSER" quiet;run;
+
+			data CASUSER.REG_INTERVALS_DAYS(rename=(start_dt=day_dt) keep=product_id pbo_location_id start_dt net_price_amt gross_price_amt);
+				set CASUSER.REG_INTERVALS_5;
+				output;
+				do while (start_dt < end_dt);
+					start_dt = intnx('days', start_dt, 1);
+					output;
+				end;
+			run;
+
+			proc casutil;droptable casdata="REG_INTERVALS_5" incaslib="CASUSER" quiet;run;
+			
+			data CASUSER.INTERVALS(rename=(price_net=net_price_amt price_gro=gross_price_amt));
+				set CASUSER.REG_INTERVALS_DAYS;
+				by pbo_location_id product_id day_dt;
+				keep pbo_location_id product_id start_dt end_dt price_net price_gro;
+				format start_dt end_dt date9.;
+				retain start_dt end_dt price_net price_gro l_gross_price;
+				
+				l_gross_price = lag(gross_price_amt);
+				l_day_dt = lag(day_dt);
+				
+				/*первое наблюдение в ряду - сбрасываем хар-ки интервала*/
+				if first.product_id then do;
+					start_dt = day_dt;
+					end_dt =.;
+					price_net = net_price_amt;
+					price_gro = gross_price_amt;
+					l_gross_price = .z;
+					l_day_dt = .;
+				end;
+				
+				/*сбрасываем текущий интервал, готовим следующий*/
+				if (gross_price_amt ne l_gross_price or l_day_dt ne day_dt-1) and not first.product_id then do;
+					end_dt = l_day_dt;
+					output;
+					start_dt = day_dt;
+					end_dt = .;
+					price_net = net_price_amt;
+					price_gro = gross_price_amt;
+				end;
+				if last.product_id then do;
+					end_dt = day_dt;
+					output;
+				end;
+			run;
+
+			proc casutil;droptable casdata="REG_INTERVALS_DAYS" incaslib="CASUSER" quiet;run;
+
+			/*Обработка колебаний цен вниз окном. Если есть скачки кратковременные скачки вниз, 
+				а потом возвращение на прежнюю цену, то скачок цены игнорируется END*/		
+
+			data CASUSER.&lmvOutTableName(append=yes);
+				set CASUSER.INTERVALS;
+			run;
+
+			proc casutil;droptable casdata="INTERVALS" incaslib="CASUSER" quiet;run;
 		%end;
 		
 		%let lmvIterCounter = %eval(&lmvIterCounter. + 1);
+
 		data _NULL_;
 			if 0 then set CASUSER.PBO_USED nobs=n;
 			call symputx('lmvPboUsedNum',n);
 			stop;
 		run;
+
 	%end;
 
 	proc casutil;
@@ -389,25 +576,8 @@
 		droptable casdata="PROMO_FILT_SKU_PBO" incaslib="CASUSER" quiet;
 		droptable casdata="PRICE_FILT" incaslib="CASUSER" quiet;
 		droptable casdata="PBO_USED" incaslib="CASUSER" quiet;
-		droptable casdata="pbo_list_tmp" incaslib="CASUSER" quiet;
-		droptable casdata="PBO_USED" incaslib="CASUSER" quiet;
+		droptable casdata="PBO_LIST_TMP" incaslib="CASUSER" quiet;
 		droptable casdata="pbo_list" incaslib="CASUSER" quiet;
-		droptable casdata="PBO_LIST_BATCH" incaslib="CASUSER" quiet;
-		droptable casdata="PROMO_FILT_SKU_PBO_BATCH" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH" incaslib="CASUSER" quiet;
-		droptable casdata="PROMO_FILT_SKU_PBO_BATCH_DAYS" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS_1" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS_2" incaslib="CASUSER" quiet;
-		droptable casdata="ALL_DAYS_PROMO" incaslib="CASUSER" quiet;
-		droptable casdata="ALL_DAYS_PROMO_1" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS_3" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS_4" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS_4_1" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS_4_2" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS_5" incaslib="CASUSER" quiet;
-		droptable casdata="PRICE_BATCH_DAYS_6" incaslib="CASUSER" quiet;
-		droptable casdata="REG_INTERVALS" incaslib="CASUSER" quiet;
 	run;
 
 %mend price_regular_past;

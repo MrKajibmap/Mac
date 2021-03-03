@@ -43,6 +43,7 @@
 %global ETL_DEFAULT_CURRENCY;       /* Валюта по умолчанию (рубли) */
 %global ETL_DEFAULT_LANGUAGE;       /* Язык по умолчанию (русский) */
 
+%global DEPTH_STORED_VERSIONS;		/* Глубина хранения версия в директориях etl_stg etl_ia */
 %global IORC_SOK;                   /* Константа - номер ошибки _SOK */
 %global IORC_DSENOM;                /* Константа - номер ошибки _DSENOM */
 %global IORC_DSENMR;                /* Константа - номер ошибки _DSENMR */
@@ -133,6 +134,7 @@
 %let ETL_DEFAULT_CURRENCY           =  "RUR";
 %let ETL_DEFAULT_LANGUAGE           =  "RUS";
 
+%let DEPTH_STORED_VERSIONS			=  5;
 %let IORC_SOK                       =  %sysrc(_SOK);
 %let IORC_DSENOM                    =  %sysrc(_DSENOM);
 %let IORC_DSENMR                    =  %sysrc(_DSENMR);

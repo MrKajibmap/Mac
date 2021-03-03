@@ -66,7 +66,7 @@
 	*     mpMode 		- Режим работы - S/T/A(Скоринг/Обучение/Обучение+скоринг)
 	*	  mpOutTrain	- выходная таблица набора для обучения
 	*	  mpOutScore	- выходная таблица набора для скоринга */
-	
+	/*
 	%M_ETL_REDIRECT_LOG(START, rtp_2_load_data_mastercode, Main);
 	%M_LOG_EVENT(START, rtp_2_load_data_mastercode);
 		%rtp_2_load_data_mastercode( mpMode=A,
@@ -91,6 +91,7 @@
 	%if &mvExist=0 %then %do;
 		%abort;
 	%end;
+	*/
 	/* Макрос для загрузки данных в CAS в рамках сквозного процесса для оперпрогноза (PBO)
 	*
 	*  ПАРАМЕТРЫ:
@@ -109,6 +110,7 @@
 	*							mpOutTableTrain=dm_abt.pbo_train,
 								mpOutTableScore=dm_abt.pbo_score);
 	*							); */
+	/*
 	%M_ETL_REDIRECT_LOG(START, rtp_3_load_data_pbo, Main);
 	%M_LOG_EVENT(START, rtp_3_load_data_pbo);
 		%rtp_3_load_data_pbo(mpMode=A, 
@@ -129,7 +131,7 @@
 	%if &mvExist=0 %then %do;
 		%abort;
 	%end;
-	
+	*/
 	/*
 	%rtp_4_modeling(mode=TRAIN,
 						external=1,
@@ -146,6 +148,7 @@
 						default_nominal=OTHER_PROMO SUPPORT BOGO DISCOUNT EVM_SET NON_PRODUCT_GIFT PAIRS PRODUCT_GIFT SIDE_PROMO_FLAG HERO ITEM_SIZE OFFER_TYPE PRICE_TIER AGREEMENT_TYPE BREAKFAST BUILDING_TYPE COMPANY DELIVERY DRIVE_THRU MCCAFE_TYPE PRICE_LEVEL WINDOW_TYPE week weekday month weekend_flag DEFENDER_DAY FEMALE_DAY MAY_HOLIDAY NEW_YEAR RUSSIA_DAY SCHOOL_START STUDENT_DAY SUMMER_START VALENTINE_DAY,
 					model_prefix=FOREST);	
 	*/		
+	
 	
 	%M_ETL_REDIRECT_LOG(START, rtp_4_modeling_pmix, Main);
 	%M_LOG_EVENT(START, rtp_4_modeling_PMIX);
@@ -166,6 +169,7 @@
 	%M_LOG_EVENT(END, rtp_4_modeling_PMIX);	
 	%M_ETL_REDIRECT_LOG(END, rtp_4_modeling_pmix, Main);
 
+
 	/*
 	%rtp_4_modeling(mode=TRAIN,
 					external=1,
@@ -183,6 +187,8 @@
 				model_prefix=MASTER_FOREST);
 	*/
 		
+		
+		/*
 	%M_ETL_REDIRECT_LOG(START, rtp_4_modeling_mc, Main);
 	%M_LOG_EVENT(START, rtp_4_modeling_MC);			
 		%rtp_4_modeling(mode=SCORE,
@@ -235,23 +241,25 @@
 	%if &mvExist=0 %then %do;
 		%abort;
 	%end;					
-	
+	*/
 	/* Обратная интеграция + ПЛМ */
+	
+	
 	%M_ETL_REDIRECT_LOG(START, rtp_7_out_integration, Main);
 	%M_LOG_EVENT(START, rtp_7_out_integration);	
 		%rtp_7_out_integration(mpVfPmixProjName=&VF_PMIX_PROJ_NM.,
 									mpVfPboProjName=&VF_PBO_PROJ_NM.,
-									mpMLPmixTabName=casshort.pmix_reconciled_full,
+									mpMLPmixTabName=casshort.pmix_days_result,
 									mpInEventsMkup=dm_abt.events_mkup,
 									mpInWpGc=dm_abt.wp_gc,
-									mpOutPmixLt=casuser.plan_pmix_month,
-									mpOutGcLt=casuser.plan_gc_month, 
-									mpOutUptLt=casuser.plan_upt_month, 
-									mpOutPmixSt=casuser.plan_pmix_day,
-									mpOutGcSt=casuser.plan_gc_day, 
-									mpOutUptSt=casuser.plan_upt_day, 
-									mpOutOutforgc=casuser.TS_OUTFORGC,
-									mpOutOutfor=casuser.TS_OUTFOR, 
+									mpOutPmixLt=mn_short.plan_pmix_month,
+									mpOutGcLt=mn_short.plan_gc_month, 
+									mpOutUptLt=mn_short.plan_upt_month, 
+									mpOutPmixSt=mn_short.plan_pmix_day,
+									mpOutGcSt=mn_short.plan_gc_day, 
+									mpOutUptSt=mn_short.plan_upt_day, 
+									mpOutOutforgc=mn_short.TS_OUTFORGC,
+									mpOutOutfor=mn_short.TS_OUTFOR, 
 									mpOutNnetWp=public.nnet_wp1,
 									mpPrmt=Y,
 									mpInLibref=casshort);
@@ -261,7 +269,7 @@
 	%symdel mvcnt mvExist;
 	proc sql;
 		select count(*) as cnt into :mvcnt
-		from casuser.plan_pmix_month
+		from mn_short.plan_pmix_month
 		;
 	quit;
 	%let mvExist=%symexist(mvcnt);
@@ -270,21 +278,23 @@
 		%abort;
 	%end;
 	
+	
+	
 	%M_ETL_REDIRECT_LOG(START, rtp_komp_sep, Main);
 	%M_LOG_EVENT(START, rtp_komp_sep);
-	%rtp_komp_sep(mpInPmixLt=casuser.plan_pmix_month,
-					mpInGcLt=casuser.plan_gc_month, 
-					mpInUptLt=casuser.plan_upt_month, 
-					mpInPmixSt=casuser.plan_pmix_day,
-					mpInGcSt=casuser.plan_gc_day, 
-					mpInUptSt=casuser.plan_upt_day, 
+	%rtp_komp_sep(mpInPmixLt=mn_short.plan_pmix_month,
+					mpInGcLt=mn_short.plan_gc_month, 
+					mpInUptLt=mn_short.plan_upt_month, 
+					mpInPmixSt=mn_short.plan_pmix_day,
+					mpInGcSt=mn_short.plan_gc_day, 
+					mpInUptSt=mn_short.plan_upt_day, 
 					mpPathOut=/data/dm_rep/);
 	%M_LOG_EVENT(END, rtp_komp_sep);	
 	%M_ETL_REDIRECT_LOG(END, rtp_komp_sep, Main);
 	%symdel mvcnt mvExist;
 	proc sql;
 		select count(*) as cnt into :mvcnt
-		from casuser.plan_pmix_month
+		from mn_short.plan_pmix_month
 		;
 	quit;
 	%let mvExist=%symexist(mvcnt);
@@ -307,7 +317,9 @@
 
 
 	%dp_jobexecution(mpJobName=ACT_LOAD_UPT_FoM_KOMP);
-	%dp_jobexecution(mpJobName=ACT_LOAD_UPT_FoD_KOMP);
+	
+	*%dp_jobexecution(mpJobName=ACT_LOAD_UPT_FoD_KOMP);  
+	/* самый долгий */
 
 
 	%dp_jobexecution(mpJobName=ACT_LOAD_QNT_FoM_NONKOMP);
@@ -419,10 +431,11 @@
 		*%M_ETL_REDIRECT_LOG(END, test, Main);
 		
 	%mend load_csv_to_dp;
-	%load_csv_to_dp(mpJobName=ACT_LOAD_QNT_FoD_KOMP);
+	%load_csv_to_dp(mpJobName=ACT_LOAD_UPT_FoD_KOMP);
+	*%load_csv_to_dp(mpJobName=ACT_LOAD_QNT_FoD_KOMP);
 	
 	/* start seeding */
-/*	%dp_jobexecution(mpJobName=ACT_SEED_COMP_SALE_MONTH);
+	%dp_jobexecution(mpJobName=ACT_SEED_COMP_SALE_MONTH);
 	%dp_jobexecution(mpJobName=ACT_SEED_COMP_SALE_DAY);
 	%dp_jobexecution(mpJobName=ACT_SEED_COMP_GC_MONTH);
 	%dp_jobexecution(mpJobName=ACT_SEED_COMP_GC_DAY);
@@ -438,5 +451,5 @@
 
 	%M_LOG_EVENT(END, load_to_dp);	
 	%M_ETL_REDIRECT_LOG(END, load_to_dp, Main);
-*/
+
 %mend rtp_full_process;

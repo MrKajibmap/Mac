@@ -1,4 +1,4 @@
-%macro DWF_400_Setup_Other;
+%macro dwf_400_setup_other;
 	%let etls_jobName = 001_400_Setup_Other;
 	%etl_job_start;
 
@@ -89,4 +89,4 @@
 		select * from work.ETL_RESOURCE_TYPE_LOAD
 		;
 	quit;
-%mend DWF_400_Setup_Other;
+%mend dwf_400_setup_other;

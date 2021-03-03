@@ -60,8 +60,8 @@
 	%let lmvReportDttm=&ETL_CURRENT_DTTM.;
 	%member_names (mpTable=&mpPmixSalAbt, mpLibrefNameKey=lmvOutLibrefPmixSalAbt, mpMemberNameKey=lmvOutTabNamePmixSalAbt);
 	/* Получение списка VF-проектов */
-	%vf_get_project_list(mpOut=work.vf_project_list);
 	/* Извлечение ID для VF-проекта по его имени */
+	%vf_get_project_list(mpOut=work.vf_project_list);
 	%let lmvVfPboName = &mpVfPboProjName.;
 	%let lmvVfPboId = %vf_get_project_id_by_name(mpName=&lmvVfPboName., mpProjList=work.vf_project_list);
 	
@@ -377,7 +377,7 @@
 
 	proc casutil;
      promote casdata="&lmvOutTabNamePmixSalAbt._dlv" incaslib="casuser" outcaslib="mn_long";
-	 *save incaslib="mn_long" outcaslib="mn_long" casdata="&lmvOutTabNamePmixSalAbt._dlv" casout="&lmvOutTabNamePmixSalAbt._dlv.sashdat" replace;
+	 save incaslib="mn_long" outcaslib="mn_long" casdata="&lmvOutTabNamePmixSalAbt._dlv" casout="&lmvOutTabNamePmixSalAbt._dlv.sashdat" replace;
 	run;
 /*
 	data public.&lmvOutTabNamePmixSalAbt._dlv(promote=yes);

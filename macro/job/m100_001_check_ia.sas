@@ -37,7 +37,7 @@
 		%resource_add (mpResourceId=&resource_id., mpDate=&JOB_START_DTTM., mpStatus=A);
 	%mend add_resources;
 	
-	%if %member_obs(mpData=WORK.OPEN_RESOURCES) eq 25 %then %do;
+	%if %member_obs(mpData=WORK.OPEN_RESOURCES) eq 26 %then %do;
 	
 		%util_loop_data (mpData=WORK.OPEN_RESOURCES, mpLoopMacro=add_resources);
 		

@@ -54,6 +54,7 @@
 	
 	%etl_job_finish;
 
+	%let privet = %sysfunc(sleep(60,1));
 %mend m100_001_check_ia;
 
 

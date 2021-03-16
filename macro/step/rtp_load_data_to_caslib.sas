@@ -24,6 +24,7 @@
 *  24-07-2020  Борзунов     Начальное кодирование
 *  27-08-2020  Борзунов		Заменен источник данных на ETL_IA. Добавлена выгрузка на диск целевых таблиц
 *  24-09-2020  Борзунов		Добавлена промо-разметка из ПТ
+*  15-03-2020  Карбовская   Добавлена управляющая промо-таблица
 ****************************************************************************/
 %macro rtp_load_data_to_caslib(mpWorkCaslib=casshort);
 
@@ -201,16 +202,10 @@
 				create table work.pmix_full as 
 				select distinct t1.product_id, t1.pbo_location_id, t1.sales_dt, t1.channel_cd, t1.sales_qty, t1.gross_sales_amt, t1.net_sales_amt, t1.sales_qty_promo
 				from (select * 
-				/*
-					  from etl_ia.pmix_sales t1
-					  */
 					    from etl_ia.pmix_sales t1
 				 	  where sales_dt > &lmvStartDate.
 				) t1
 				inner join (select product_id, pbo_location_id, sales_dt,channel_cd, max(valid_to_dttm) as max
-							/*
-						   from etl_ia.pmix_sales 
-						   */
 						    from etl_ia.pmix_sales
 						  where sales_dt > &lmvStartDate.
 							group by product_id, pbo_location_id, channel_cd, sales_dt
@@ -320,7 +315,7 @@
 	proc casutil;
 		promote casdata="assort_matrix" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="pbo_close_period" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
-		droptable casdata="pbo_closed_ml" incaslib="casuser" quiet;
+/* 		droptable casdata="pbo_closed_ml" incaslib="casuser" quiet; */
 	run;
 
 	/****** 6. Добавление промо ******/
@@ -341,8 +336,9 @@
 		droptable casdata="abt_promo" incaslib="casuser" quiet;
 		droptable casdata="promo" incaslib="casuser" quiet;
 	run;
+
 	data CASUSER.pbo_loc_hierarchy (replace=yes  drop=valid_from_dttm valid_to_dttm);
-			set &lmvInLib..pbo_loc_hierarchy(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+		set &lmvInLib..pbo_loc_hierarchy(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
 	
 	data CASUSER.promo (replace=yes);
@@ -357,6 +353,33 @@
 		set &lmvWorkCaslib..promo_prod_enh;
 	run;
 	
+/* 	data casuser.promo_mech_transformation; */
+/* 		infile datalines delimiter='|'; */
+/* 		length old_mechanic new_mechanic $50;  */
+/* 	    input old_mechanic $ new_mechanic $; */
+/* 	    datalines; */
+/* 	BOGO / 1+1|bogo */
+/* 	Discount|discount */
+/* 	EVM/Set|evm_set */
+/* 	Non-Product Gift|non_product_gift */
+/* 	Pairs|pairs */
+/* 	Product Gift|product_gift */
+/* 	Other: Discount for volume|other_discount */
+/* 	Other: Digital (app)|other_digital */
+/* 	NP Promo Support|support */
+/* 	; */
+/* 	run; */
+
+/* TODO file macrovar */
+	%let file = /home/ru-akarbovskaya/sasuser.viya/PROMO_MECH_TRANSFORMATION.csv;
+
+	data casuser.promo_mech_transformation;
+		length old_mechanic new_mechanic $50;
+		infile "&file." dsd firstobs=2;                 
+		input old_mechanic $ new_mechanic $;                            
+	run;
+
+
 	proc fedsql sessref=casauto noprint;
 			create table casuser.promo_pbo {options replace=true} as 
 			select PBO_LOCATION_ID,PROMO_ID
@@ -461,9 +484,9 @@
 	quit;
 
 	/* Соединяем в единый справочник ПБО */
-	*data casuser.product_lvl_all;
-		*set casuser.lvl5 casuser.lvl4 casuser.lvl3 casuser.lvl2 casuser.lvl1;
-	*run;
+	data casuser.product_lvl_all;
+		set casuser.lvl5 casuser.lvl4 casuser.lvl3 casuser.lvl2 casuser.lvl1;
+	run;
 
 	/* Добавляем к таблице промо ПБО и товары */
 	proc fedsql sessref = casauto;
@@ -497,17 +520,7 @@
 				t1.CHANNEL_CD,
 	 			t1.NP_GIFT_PRICE_AMT, 
 				t1.PROMO_MECHANICS,
-				(case
-					when t1.PROMO_MECHANICS = 'BOGO / 1+1' then 'bogo'
-					when t1.PROMO_MECHANICS = 'Discount' then 'discount'
-					when t1.PROMO_MECHANICS = 'EVM/Set' then 'evm_set'
-					when t1.PROMO_MECHANICS = 'Non-Product Gift' then 'non_product_gift'
-					when t1.PROMO_MECHANICS = 'Pairs' then 'pairs'
-					when t1.PROMO_MECHANICS = 'Product Gift' then 'product_gift'
-					when t1.PROMO_MECHANICS = 'Other: Discount for volume' then 'other_promo'
-					when t1.PROMO_MECHANICS = 'NP Promo Support' then 'support'
-					/* TEMP  else 'other_promo' */
-				end) as promo_mechanics_name,
+				t4.new_mechanic as promo_mechanics_name,
 				1 as promo_flag		
 			from
 				casuser.promo as t1 
@@ -519,11 +532,14 @@
 				casuser.promo_x_product_leaf as t3
 			on
 				t1.PROMO_ID = t3.PROMO_ID 
+			inner join 
+				casuser.promo_mech_transformation as t4
+			on t1.promo_mechanics = t4.old_mechanic 
 		;
 	quit;
 		
 	proc casutil;
-		droptable casdata="promo_x_product_leaf" incaslib="&lmvWorkCaslib." quiet;
+/* 		droptable casdata="promo_x_product_leaf" incaslib="&lmvWorkCaslib." quiet; */
 		promote casdata="product_lvl_all" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="pbo_lvl_all" incaslib="casuser" outcaslib="&lmvWorkCaslib.";
 		promote casdata="promo_prod" incaslib="casuser" outcaslib="&lmvWorkCaslib.";

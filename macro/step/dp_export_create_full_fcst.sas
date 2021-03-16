@@ -32,6 +32,7 @@
 		droptable casdata="&lmvOutTabNameNm." incaslib="&lmvOutLibrefNm." quiet;
 	quit;
 	
+	/*
 	data casuser.full_fcst(replace=yes);
 		set casuser.dp_out_fcst_nonkomp;
 	run;
@@ -43,8 +44,33 @@
 	data &lmvOutLibrefNm..&lmvOutTabNameNm. (promote=yes);
 		set casuser.full_fcst;
 	run;
+	*/
 	
+	proc contents data= CASUSER.DP_OUT_FCST_KOMP out=work.komp_struct;
+	run;
+
+	proc contents data= CASUSER.DP_OUT_FCST_nonKOMP out=work.nonkomp_struct;
+	run;
+
+	proc sql noprint;
+			select komp.name into :lmvValidVarList separated by ", "
+			from work.komp_struct komp
+			inner join work.nonkomp_struct nonkomp
+			on komp.name = nonkomp.name
+			;
+	quit;
+	%put &=lmvValidVarList;
+	proc fedsql sessref=casauto;
+		create table casuser.full_fcst {options replace=true} as
+			select &lmvValidVarList. 
+			from CASUSER.DP_OUT_FCST_KOMP
+			union 
+			select &lmvValidVarList. 
+			from CASUSER.DP_OUT_FCST_nonKOMP
+		;
+	quit;
 	proc casutil;
+		promote casdata="full_fcst" incaslib="casuser" outcaslib="&lmvOutLibrefNm." casout="&lmvOutTabNameNm.";
 		droptable casdata="full_fcst" incaslib="casuser" quiet;
         save incaslib="&lmvOutLibrefNm." outcaslib="&lmvOutLibrefNm." casdata="&lmvOutTabNameNm." casout="&lmvOutTabNameNm..sashdat" replace;
     quit;

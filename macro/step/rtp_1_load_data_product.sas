@@ -28,6 +28,7 @@
 *  24-07-2020  Борзунов     Начальное кодирование
 *  27-08-2020  Борзунов		Заменен источник данных на ETL_IA. Добавлена выгрузка на диск целевых таблиц
 *  24-09-2020  Борзунов		Добавлена промо-разметка из ПТ
+*  15-03-2020  Карбовская   Добавлена управляющая таблица для промо-механик
 ****************************************************************************/
 %macro rtp_1_load_data_product(mpMode=A,
 					 mpOutTrain=casshort.all_ml_train,
@@ -119,6 +120,8 @@
 				t1.product_id = t2.product_id
 				and t1.SALES_DT >= %str(date%')%sysfunc(putn(&lmvStartDate.,yymmdd10.))%str(%') and
 				t1.SALES_DT <= %str(date%')%sysfunc(putn(&lmvScoreEndDate.,yymmdd10.))%str(%')
+/* TODO: filter */
+			where t1.product_id in (2010, 7152)
 		;
 	quit;
 
@@ -238,7 +241,6 @@
 	quit;
 
 	/* 4.3.2 Оставляем нулевые продажи в периодах ввода товаров из product chain */
-	/*
 	proc fedsql sessref=casauto;
 		create table casuser.abt4_ml{options replace=true} as 
 			select
@@ -261,7 +263,7 @@
 				and t1.sales_dt <= %str(date%')%sysfunc(putn(&lmvEndDate.,yymmdd10.))%str(%')
 		;
 	quit;
-	*/
+
 
 	/* 4.3 Убираем из истории пропуски в продажах */
 	proc fedsql sessref=casauto;
@@ -591,6 +593,35 @@
 	  droptable casdata='lag_abt3' incaslib='casuser' quiet;
 	  droptable casdata="abt6_ml" incaslib="casuser" quiet;
 	run;
+
+	/* Генерим макропеременные для вставки в код */
+	data _null_;
+		set casuser.promo_mech_transformation end=end;
+		length sql_list sql_max_list $1000;
+		retain sql_list sql_max_list;
+		by new_mechanic;
+	
+		if _n_ = 1 then do;
+			sql_list = cats('t1.', new_mechanic);
+			sql_max_list = cat('max(coalesce(t2.', strip(new_mechanic), ', 0)) as ', strip(new_mechanic));
+		end;
+		else if first.new_mechanic then do;
+			sql_list = cats(sql_list, ', t1.', new_mechanic);
+			sql_max_list = cat(strip(sql_max_list), ', max(coalesce(t2.', strip(new_mechanic), ', 0)) as ', strip(new_mechanic));
+		end;
+	
+		if end then do;
+			call symputx('promo_list_sql', sql_list, 'G');
+			call symputx('promo_list_sql_max', sql_max_list, 'G');
+		end;
+	run;
+	
+	%let promo_list_sql_t2 = %sysfunc(tranwrd(%quote(&promo_list_sql.),%str(t1),%str(t2)));
+
+	%put &promo_list_sql.;
+	%put &promo_list_sql_max.;
+	%put &promo_list_sql_t2.;
+
 	
 	/* Соединяем с витриной */
 	proc fedsql sessref = casauto;
@@ -601,15 +632,7 @@
 				t1.PRODUCT_ID,
 				t1.CHANNEL_CD,
 				t1.SALES_DT,
-				max(coalesce(t2.other_promo, 0)) as other_promo,  
-				/* 0 as other_promo, */
-				max(coalesce(t2.support, 0)) as support,
-				max(coalesce(t2.bogo, 0)) as bogo,
-				max(coalesce(t2.discount, 0)) as discount,
-				max(coalesce(t2.evm_set, 0)) as evm_set,
-				max(coalesce(t2.non_product_gift, 0)) as non_product_gift,
-				max(coalesce(t2.pairs, 0)) as pairs,
-				max(coalesce(t2.product_gift, 0)) as product_gift,
+				&promo_list_sql_max.,
 				max(coalesce(t3.side_promo_flag, 0)) as side_promo_flag
 			from
 				casuser.abt5_ml as t1
@@ -667,14 +690,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t2.other_promo,  
-				t2.support,
-				t2.bogo,
-				t2.discount,
-				t2.evm_set,
-				t2.non_product_gift,
-				t2.pairs,
-				t2.product_gift,
+				&promo_list_sql_t2.,
 				t2.side_promo_flag 
 			from
 				casuser.abt5_ml as t1
@@ -733,14 +749,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t2.A_CPI,
 				t2.A_GPD,
@@ -792,14 +801,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -860,14 +862,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -928,14 +923,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -995,14 +983,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -1067,14 +1048,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -1151,14 +1125,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -1240,14 +1207,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -1456,14 +1416,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -1569,14 +1522,7 @@
 				t1.lag_week_pct90,	
 				t1.lag_year_pct10,	
 				t1.lag_year_pct90,
-				t1.other_promo,  
-				t1.support,
-				t1.bogo,
-				t1.discount,
-				t1.evm_set,
-				t1.non_product_gift,
-				t1.pairs,
-				t1.product_gift,
+				&promo_list_sql.,
 				t1.side_promo_flag,
 				t1.A_CPI,
 				t1.A_GPD,
@@ -1628,13 +1574,16 @@
 		droptable casdata="abt15_ml" incaslib="casuser" quiet;
 	quit;
 	
+/* TODO: this should be in the beginning */
+	%let lmvStartDateScore = &VF_HIST_END_DT_SAS.;
+
 	proc fedsql sessref=casauto;
 	%if &lmvMode. = A or &lmvMode = T %then %do;
 		create table casuser.&lmvTabNmOutTrain.{options replace = true} as 
 			select *
 			from casuser.abt16_ml 
 			where sales_dt >= date %str(%')%sysfunc(putn(&lmvEndDate., yymmdd10.))%str(%')
-			/* where sales_dt >= date %str(%')%sysfunc(putn(%sysfunc(intnx(year,&lmvStartDate.,1,b)), yymmdd10.))%str(%') */
+				and sales_dt < date %str(%')%sysfunc(putn(&lmvStartDateScore., yymmdd10.))%str(%')
 			;
 	%end;
 	%if &lmvMode. = A or &lmvMode = S %then %do;
@@ -1658,8 +1607,8 @@
 			promote casdata="&lmvTabNmOutScore." incaslib="casuser" outcaslib="&lmvLibrefOutScore.";
 			*save incaslib="&lmvLibrefOutScore." outcaslib="&lmvLibrefOutScore." casdata="&lmvTabNmOutScore." casout="&lmvTabNmOutScore..sashdat" replace; 
 		%end;
-		droptable casdata="&lmvTabNmOutScore." incaslib="casuser" quiet;
-		droptable casdata="&lmvTabNmOutTrain." incaslib="casuser" quiet;
+/* 		droptable casdata="&lmvTabNmOutScore." incaslib="casuser" quiet; */
+/* 		droptable casdata="&lmvTabNmOutTrain." incaslib="casuser" quiet; */
 		droptable casdata="abt16_ml" incaslib="casuser" quiet;
 	quit;
 

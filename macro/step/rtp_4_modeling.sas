@@ -1,234 +1,275 @@
-/*****************************************************************
-*  ВЕРСИЯ:
-*     $Id: 
-*
-******************************************************************
-*  НАЗНАЧЕНИЕ:
-*     Макрос для общего процесса: загрузка таблицы моделей, обучение моделей, скоринг по моделяц из таблицы
-*
-*  ПАРАМЕТРЫ:
-*     mpMode 		- Режим работы - S/T/A(Скоринг/Обучение/Обучение+скоринг)
-*	  mpOutTrain	- выходная таблица набора для обучения
-*	  mpOutScore	- выходная таблица набора для скоринга
-*	
-*	
-******************************************************************
-*  Использует: 
-*	  %load_model_table(mpFile=&external_modeltable., mpModTable=&modeltable.);
-*	  %m_rtp_create_model_table(cts=&categories., abt=&traintable., modtable=&modeltable., params=&default_params., interval=&default_interval., nominal=&default_nominal., prefix=&model_prefix.);=
-*	  %rtp_train_multi(mpThreadCnt=10,
-*						mpModelTable=&modeltable.,
-*						mpId = &ids.,
-*						mpTarget =&target.,
-*						mpAbt = &traintable.,
-*						mpPrefix = &model_prefix.,
-*						mpStart = 1);
-*
-*	%rtp_score_multi(mpThreadCnt=10,
-*					mpModelTable=&modeltable.,
-*					mpId = &ids.,
-*					mpTarget =sum_qty,
-*					mpAbt = &scoretable.,
-*					mpPrefix = FOREST,
-*					mpStart = 1,
-*					mpOut = &resulttable.)
-*
-*  Устанавливает макропеременные:
-*     нет
-*
-******************************************************************
-*  Пример использования:
-* Набор для товаров 
-*%rtp_4_modeling(mode=SCORE,
-*				external=1,
-*				ids = product_id pbo_location_id sales_dt,
-*				target=sum_qty.,
-*				categories=lvl2_id prod_lvl2_id, 
-*				external_modeltable=/data/files/input/PMIX_MODEL_TABLE.csv, 
-*				modeltable=PMIX_MODEL_TABLE,
-*				traintable=dm_abt.all_ml_train,
-*				scoretable=dm_abt.all_ml_scoring,
-*				resulttable=dm_abt.PMIX_DAYS_RESULT, 
-*				default_params=seed=12345 loh=0 binmethod=QUANTILE maxbranch=2 assignmissing=useinsearch minuseinsearch=5 ntrees=10 maxdepth=10 inbagfraction=0.6 minleafsize=5 numbin=50 printtarget,
-*				default_interval=GROSS_PRICE_AMT lag_month_avg lag_month_med lag_qtr_avg lag_qtr_med lag_week_avg lag_week_med lag_month_std lag_qtr_std lag_week_std lag_month_pct10 lag_month_pct90 lag_qtr_pct10 lag_qtr_pct90 lag_week_pct10 lag_week_pct90 PRICE_RANK PRICE_INDEX,
-*				default_nominal=OTHER_PROMO SUPPORT BOGO DISCOUNT EVM_SET NON_PRODUCT_GIFT PAIRS PRODUCT_GIFT SIDE_PROMO_FLAG HERO ITEM_SIZE OFFER_TYPE PRICE_TIER AGREEMENT_TYPE BREAKFAST BUILDING_TYPE COMPANY DELIVERY DRIVE_THRU MCCAFE_TYPE PRICE_LEVEL WINDOW_TYPE week weekday month weekend_flag DEFENDER_DAY FEMALE_DAY MAY_HOLIDAY NEW_YEAR RUSSIA_DAY SCHOOL_START STUDENT_DAY SUMMER_START VALENTINE_DAY,
-*				model_prefix=FOREST);
-*
-*
-* Набор для мастер-кодов 
-*%rtp_4_modeling(external=1, 
-*			ids=&master_ids.,
-*			target=&master_target., 
-*			categories=&master_categories.,
-*			external_modeltable=&master_external_modeltable., 
-*			modeltable=&master_modeltable.,
-*			traintable=&master_traintable., 
-*			scoretable=&master_scoretable., 
-*			resulttable=&master_resulttable., 
-*			default_params=&master_default_params., 
-*			default_interval=&master_default_interval., 
-*			default_nominal=&master_default_nominal.,
-*			model_prefix=&master_model_prefix.);
-*
-*
-****************************************************************************
-*  24-07-2020  Борзунов     Начальное кодирование
-****************************************************************************/
-
-/* Загрузка таблицы моделей извне */
-/* mpFile - путь к файлу с таблицей моделей */
-/* mpModTable - таблица моделей в Models */
-%macro load_model_table(mpFile=&external_modeltable., mpModTable=&modeltable.);
-	proc casutil incaslib="Models" outcaslib="Models";
-		droptable casdata="&mpModTable." quiet;
-	run;
-
-	%let max_length = $500;
-
-	data models.&mpModTable.;
-		length filter model params interval nominal &max_length.;
-		infile "&mpFile." dsd firstobs=2;                 
-		input filter $ model $ params $ interval $ nominal $ train score n;                            
-	run;
-	
-	proc casutil;                           
-	    save casdata="&mpModTable." incaslib="models" outcaslib="models" replace; 
-		promote casdata="&mpModTable." incaslib="Models" outcaslib="Models";
-	run;
-%mend load_model_table;
-
-
-/* Создание таблицы моделей */
-/* Можно запускать, если нет внешнего файла */
-
-/* mpCts - набор категорий, по которым нужно разбить модели */
-/* mpAbt - витрина на которой будет обучение моделей  */
-/* mpModelTable - название таблицы моделей в Models*/
-/* mpParams - дефолтные гиперпараметры */
-/* mpInterval - входные интервальные фичи */
-/* mpNominal - входные категориальные фичи */
-/* mpPrefix - префикс названий моделей */
-%macro m_rtp_create_model_table(mpCts=&categories.,
-								mpAbt=&traintable.,
-								mpModelTable=&modeltable., 
-								mpParams=&default_params., 
-								mpInterval=&default_interval., 
-								mpNominal=&default_nominal., 
-								mpPrefix=&model_prefix.);
-
-	proc casutil incaslib="Models" outcaslib="Models";
-		droptable casdata="&mpModelTable." quiet;
-	run;
-
-	%local lmvLastCat lmvLibrefAbt lmvTabNmAbt;
-
-	%let lmvLastCat = %scan(&mpCts., -1);
-	%member_names (mpTable=&mpAbt, 
-					mpLibrefNameKey=lmvLibrefAbt,
-					mpMemberNameKey=lmvTabNmAbt);
-	
-	/* Получение всех комбинаций категорий */
-	data casuser.categories / sessref="casauto" single=yes;
-		set &lmvLibrefAbt..&lmvTabNmAbt.(keep=&mpCts.);
-		by &mpCts.;
-		if first.&lmvLastCat.;
-	run;
-	
-	/* Генерация таблицы моделей с условиями фильтрации */
-	data models.&mpModelTable.;
-		set casuser.categories;
-		length filter model params interval nominal $300;
-		keep filter model params interval nominal train score n; 
-		array cats[*] &mpCts.;
-	
-		filter = '';
-		string = "&mpCts.";
-		do i=1 to dim(cats);
-			if i > 1 then filter = catx('', filter, 'and');
-			filter = catx('', filter, scan(string, i), '=', input(strip(cats[i]), $10.));
-		end;
-		model = catx('_', "&mpPrefix.", _n_);
-		params = "&mpParams.";
-		interval = "&mpInterval.";
-		nominal = "&mpNominal.";
-		train = 1;
-		score = 1;
-		n = _n_;
-	run;
-	
-	proc casutil incaslib="Models" outcaslib="Models";
-		promote casdata="&mpModelTable.";
-	run;
-%mend m_rtp_create_model_table;
-
-/* Общий процесс: загрузка таблицы, обучение, скоринг */
-/* Нужно менять макропеременные наверху, здесь - только комментировать ненужные строки */
-/* external - флаг того, нужно ли загружать внешнюю таблицу */
-%macro rtp_4_modeling(mode=,
-					external=,
-					ids=,
-					target=,
-					categories=, 
-					external_modeltable=, 
-					modeltable=,
-					traintable=,
-					scoretable=,
-					resulttable=, 
-					default_params=,
-					default_interval=,
-					default_nominal=,
-					model_prefix=);
-
+%macro rtp_train_multi(mpThreadCnt=10,
+						mpModelTable=PMIX_MODEL_TABLE,
+						mpId = product_id pbo_location_id sales_dt,
+						mpTarget =sum_qty,
+						mpAbt = dm_abt.all_ml_train,
+						mpPrefix = FOREST,
+						mpStart = 1);
+		
 	%if %sysfunc(SESSFOUND(casauto)) = 0 %then %do; 
 		cas casauto;
 		caslib _all_ assign;
 	%end;
-
-	%local lmvMode;
-	%let lmvMode = %sysfunc(upcase(&mode.));
-	/* check for input params */
-	/* %if &lmvMode. <> SCORE or &lmvMode. <> TRAIN or &lmvMode. <> FULL %then %do;
-		%put ERROR: INVALID VALUE FOR PARAMETER >> MODE << (SCORE|TRAIN|FULL);
-		%abort;
-	%end; */
-
-	%if &external. %then %do;
-		%load_model_table(mpFile=&external_modeltable.,
-							mpModTable=&modeltable.);
-	%end;
-	%else %do;
-		%m_rtp_create_model_table(cts=&categories.,
-							abt=&traintable.,
-							modtable=&modeltable., 
-							params=&default_params.,
-							interval=&default_interval.,
-							nominal=&default_nominal.,
-							prefix=&model_prefix.);
-	%end;
-
+	
 	data _null_;
-		set models.&modeltable. nobs=nobs;
+		set models.&mpModelTable. nobs=nobs;
 		call symputx('length', nobs, 'G');
 		stop;
 	run;
+
+	%let mpEnd=&length.;
+	%let mvTHREAD_CNT=&mpThreadCnt.;
+
+/* TODO file macrovar */
+	%let file = /home/ru-akarbovskaya/sasuser.viya/PROMO_MECH_TRANSFORMATION.csv;
+
+
+	data casuser.promo_mech_transformation;
+		length old_mechanic new_mechanic $50;
+		infile "&file." dsd firstobs=2;                 
+		input old_mechanic $ new_mechanic $;                            
+	run;
+
+	/* Генерим макропеременные для вставки в код */
+	data _null_;
+		set casuser.promo_mech_transformation end=end;
+		length model_list $1000;
+		retain model_list;
+		by new_mechanic;
 	
-	%if &lmvMode. = TRAIN or &lmvMode. = FULL %then %do;
-		%rtp_train_multi(mpThreadCnt=10,
-							mpModelTable=&modeltable.,
-							mpId = &ids.,
-							mpTarget =&target.,
-							mpAbt = &traintable.,
-							mpPrefix = &model_prefix.,
-							mpStart = 1);
-	%end;
-	%if &lmvMode. = SCORE or &lmvMode. = FULL %then %do;
-		%rtp_score_multi(mpThreadCnt=10,
-						mpModelTable=&modeltable.,
-						mpId = &ids.,
-						mpTarget =&target.,
-						mpAbt = &scoretable.,
-						mpPrefix = &model_prefix.,
-						mpStart = 1,
-						mpOut = &resulttable.);
-	%end;
-%mend rtp_4_modeling;
+		if _n_ = 1 then do;
+			model_list = new_mechanic;
+		end;
+		else if first.new_mechanic then do;
+			model_list = catx('', model_list, new_mechanic);
+		end;
+	
+		if end then do;
+			call symputx('promo_list_model', model_list, 'G');
+		end;
+	run;
+	
+	%put &promo_list_model.;
+	
+	proc casutil;
+		DROPTABLE CASDATA="buffer_table" INCASLIB="casuser" QUIET;
+	run;
+	
+	/* CREATE MAIN BUFFER TABLE WITH PARAMETERS FOR THREADS */
+	data casuser.buffer_table(replace=yes);
+		do i = &mpStart. to &mpEnd.;
+			output;
+		end;
+	run;
+	
+	/*
+	data casuser.buffer_table(replace=yes);
+		do i = &mpStart. to &mpEnd.;
+			if i in (10 ,11, 19, 20 ,21 ,22, 32, 33 ,42, 43, 44 ,49 ,50, 51, 52, 53, 54, 55);
+			output;
+		end;
+	run;
+	*/
+	/* CREATE BUFFERS TABLES WITH PARAMETERS FOR EACH THREAD */
+	%MACRO mGENERATE_BATCHES;
+		%GLOBAL mvBUFFER_ROW_CNT
+				mvROWS_FOR_THREAD
+				;
+		PROC SQL NOPRINT;
+				SELECT COUNT(*) AS CNT, ceil(COUNT(*)/&mvTHREAD_CNT.) AS ROWS_FOR_THREAD INTO :mvBUFFER_ROW_CNT, :mvROWS_FOR_THREAD
+				FROM casuser.BUFFER_TABLE
+				;
+		QUIT;
+	
+		%PUT &=mvBUFFER_ROW_CNT;
+		%PUT &=mvROWS_FOR_THREAD;
+	
+		/* CALC COUNT OF ROWS WITH PARAMETERS FOR SENDING TO THREADS */
+		%DO I = 1 %TO &mvTHREAD_CNT.;
+			%IF &I. = 1 %THEN %DO;
+				%LET mvFIRST_OBS =1;
+			%END;
+			%ELSE %DO;
+				%LET mvFIRST_OBS =%SYSEVALF(&I. * &mvROWS_FOR_THREAD. - &mvROWS_FOR_THREAD. +1);
+			%END;
+			/* DELETE BATCH TABLE FOR THREAD*/
+		    proc casutil; 
+				DROPTABLE CASDATA="BUFFER_TABLE_&I." INCASLIB="casuser" QUIET;
+			run;
+				/* DELETE BATCH TABLE FOR THREAD*/
+		    proc casutil; 
+				DROPTABLE CASDATA="BUFFER_TABLE_&I." INCASLIB="public" QUIET;
+			run;
+			
+			/*CREATE BATCH_TABLE FOR THREADS */
+			DATA public.BUFFER_TABLE_&I.(promote=yes);
+				SET casuser.BUFFER_TABLE(FIRSTOBS = &mvFIRST_OBS. OBS = %SYSEVALF(&mvFIRST_OBS.+&mvROWS_FOR_THREAD. -1));
+			RUN;
+		%END;
+		
+	%MEND mGENERATE_BATCHES;
+	
+	%mGENERATE_BATCHES;
+
+	%put &=mvBUFFER_ROW_CNT;
+	%put &=mvROWS_FOR_THREAD;	
+	
+	%macro signon;
+		
+		/* SIGNON THREAD_SESSIONS AND PUT PARAMETERS INTO */
+		%DO mvTHREAD_NUM = 1 %TO &mvTHREAD_CNT.;
+			SIGNON T_&mvTHREAD_NUM. sascmd="!sascmd" WAIT = YES;
+			/* ПЕРЕДАЧА ПАРАМЕТРОВ В КАЖДУЮ СЕССИЮ */
+			%SYSLPUT mvTHREAD_NUM = &mvTHREAD_NUM. / REMOTE = T_&mvTHREAD_NUM.;
+			%SYSLPUT mpTarget = &mpTarget. / REMOTE = T_&mvTHREAD_NUM.;
+			%SYSLPUT mpId = &mpId. / REMOTE = T_&mvTHREAD_NUM.;
+			%SYSLPUT mpAbt = &mpAbt. / REMOTE = T_&mvTHREAD_NUM.;
+			%SYSLPUT mpModelTable = &mpModelTable. / REMOTE = T_&mvTHREAD_NUM.;
+			%SYSLPUT mpPrefix = &mpPrefix. / REMOTE = T_&mvTHREAD_NUM.;		
+		%END;
+
+	%mend signon;
+	%signon;
+	
+	%macro main_run;
+	
+	/* CALC SCORING WITH THREADS */
+	%DO mvTHREAD_NUM = 1 %TO &mvTHREAD_CNT.;
+		RSUBMIT T_&mvTHREAD_NUM. WAIT=NO CMACVAR=T_&mvTHREAD_NUM.;
+			options notes symbolgen mlogic mprint;
+			PROC PRINTTO LOG="/data/logs/log_of_thread_&mvTHREAD_NUM..txt" NEW;
+			RUN;
+	
+			CAS T_&mvTHREAD_NUM. HOST="sasdevinf.ru-central1.internal" PORT=5570;
+			caslib _all_ assign;
+/*********** WHY ***********/
+			%include "/opt/sas/mcd_config/config/initialize_global.sas";
+			
+			PROC SQL NOPRINT;
+				SELECT COUNT(*) AS CNT INTO :mvROW_CNT 
+				FROM public.BUFFER_TABLE_&mvTHREAD_NUM.
+				;
+			QUIT;
+
+			PROC SQL NOPRINT;
+				SELECT COUNT(*) AS CNT INTO :mvROW_CNT 
+				FROM public.BUFFER_TABLE_1
+				;
+			QUIT;
+
+
+		/* MAIN CODE FOR EACH THREAD */
+		%MACRO THREAD_MAIN;
+		
+			%DO ITER = 1 %TO &mvROW_CNT.;
+					/* GET PARAMETERS FROM BUFFER TABLE */
+					DATA WORK.GET_PARAMS_FOR_THREAD_ITER;
+						SET public.BUFFER_TABLE_&mvTHREAD_NUM.(FIRSTOBS = &ITER. OBS = &ITER.);
+						CALL SYMPUTX("i", i);
+					RUN;
+					%PUT &i.;
+
+					/* %let mvIter = %sysfunc(catx(_, &mvHorNum. , .)); */
+				
+					 /* %macro m_rtp_train(mpTarget=&mpTarget., mpId=&mpId., mpAbt=&mpAbt., mpModelTable=&mpModelTable., mpPrefix=&mpPrefix.); */
+				
+						%local lmvTabNmAbt lmvLibrefAbt;
+						%member_names (mpTable=&mpAbt, mpLibrefNameKey=lmvLibrefAbt, mpMemberNameKey=lmvTabNmAbt);
+	
+						data _null_;
+							set models.&mpModelTable.(where=(n=&i.));
+							call symputx('filter', filter);
+							call symputx('model', model);
+							call symputx('params', params);
+							call symputx('interval', interval);
+							call symputx('nominal', nominal);
+							call symputx('train', train);
+						run;
+
+						data _null_;
+							set models.PMIX_MODEL_TABLE(where=(n=&i.));
+							call symputx('filter', filter);
+							call symputx('model', model);
+							call symputx('params', params);
+							call symputx('interval', interval);
+							call symputx('nominal', nominal);
+							call symputx('train', train);
+						run;
+
+							%let msg = FOREST IS TRYING TO START;
+							%put ERROR: &msg.;
+						
+						%if &train. %then %do;
+							proc casutil incaslib="Models" outcaslib="Models";
+								droptable casdata="&mpPrefix._&i." quiet;
+							run;
+
+							%let msg = FOREST STARTED;
+							%put ERROR: &msg.;
+							
+							proc forest data=&lmvLibrefAbt..&lmvTabNmAbt.(where=(&filter.))
+							  &params.;
+							
+							  target &mpTarget. / level=interval;
+							
+							  input &interval. / level=interval;
+							  input &nominal. &promo_list_model. / level=nominal;
+/* 							  input &nominal. / level=nominal; */
+							  grow VARIANCE;
+							  id &mpId.;
+							  savestate rstore=models.&model.;
+							run;
+
+							proc casutil incaslib="Models" outcaslib="Models";
+								promote casdata="&mpPrefix._&i.";
+							run;
+						%end;
+
+				/*	%mend m_rtp_train;
+					%m_rtp_train; */
+				%END;
+
+				PROC PRINTTO;
+				RUN;
+
+			%MEND THREAD_MAIN;
+
+			%THREAD_MAIN;
+
+			ENDRSUBMIT;
+			
+		%END;	
+
+	%mend main_run;
+	%main_run;
+
+	%macro end_thread;
+
+		/* CHECKING THREAD COMPLETION */
+		%LET mvIN_PROCESS = 1;
+		%DO %UNTIL (&mvIN_PROCESS=0);
+			%DO CHECK_ITER = 1 %TO &mvTHREAD_CNT.;
+				%IF &CHECK_ITER. = 1 %THEN %DO;
+					%LET mvIN_PROCESS = &&T_&CHECK_ITER.;
+				%END;
+				%ELSE %DO;
+					%LET mvIN_PROCESS = %SYSEVALF(&mvIN_PROCESS. + &&T_&CHECK_ITER.);
+					%LET mvSLEEP=%SYSFUNC(SLEEP(10, 1));
+					%PUT TRYING TO GO NEXT STEP;
+				%END;
+			%END;
+		%END;
+		
+		/*SIGNOFF THREADS AND DROP BATCH TABLES*/
+		%DO mvTHREAD_NUM = 1 %TO &mvTHREAD_CNT.;
+			SIGNOFF T_&mvTHREAD_NUM. WAIT=yes;
+			%PUT SIGNOFF OF THREAD T_&mvTHREAD_NUM. ;
+
+			proc casutil; 
+				DROPTABLE CASDATA="BUFFER_TABLE_&mvTHREAD_NUM." INCASLIB="public" QUIET;
+			run;
+		%END;
+	%mend end_thread;
+	%end_thread;	
+
+%mend rtp_train_multi;

@@ -21,12 +21,9 @@
 	  droptable casdata="promo" incaslib="casuser" quiet;
 	  droptable casdata="promo_pbo" incaslib="casuser" quiet;
 	  droptable casdata="promo_prod" incaslib="casuser" quiet;
+	  droptable casdata="pbo_dictionary" incaslib="casuser" quiet;
 	run;
 
-	data CASUSER.VAT (replace=yes);
-		set ETL_IA.VAT (where=(VALID_TO_DTTM = &ETL_SCD_FUTURE_DTTM.));
-    run;
-	
 	data CASUSER.promo (replace=yes);
 		set CASUSER.promo_enh;
 	run;
@@ -71,12 +68,30 @@
 	quit;
 	
 	proc casutil;
-	  droptable casdata="price" incaslib="casuser" quiet;
+		droptable casdata="price" incaslib="casuser" quiet;
 	run;
 	
 	data CASUSER.PRICE (replace=yes drop=valid_from_dttm valid_to_dttm);
 		set &lmvInLib..PRICE(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
 	run;
+
+/* 	VAT */
+	proc casutil;
+		droptable casdata="VAT" incaslib="casuser" quiet;
+	run;
+	
+	data CASUSER.VAT (replace=yes drop=valid_from_dttm valid_to_dttm);
+        set &lmvInLib..vat(where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+    run;
+
+/* 	PRODUCT_ATTR */
+	proc casutil;
+		droptable casdata="PRODUCT_ATTRIBUTES" incaslib="casuser" quiet;
+	run;
+
+	data CASUSER.PRODUCT_ATTRIBUTES (replace=yes drop=valid_from_dttm valid_to_dttm);
+        set &lmvInLib..PRODUCT_ATTRIBUTES (where=(valid_from_dttm<=&lmvReportDttm. and valid_to_dttm>=&lmvReportDttm.));
+    run;
 
 	proc fedsql sessref=casauto noprint;
 		create table casuser.PRICE{options replace=true} as
@@ -169,12 +184,19 @@
     quit;
 
     proc casutil;
+		promote casdata="pbo_dictionary" incaslib="casuser" outcaslib="casuser";
+		promote casdata="PRICE" incaslib="casuser" outcaslib="casuser";
+		promote casdata="promo" incaslib="casuser" outcaslib="casuser";
+		promote casdata="promo_prod" incaslib="casuser" outcaslib="casuser";
+		promote casdata="promo_pbo" incaslib="casuser" outcaslib="casuser";
       droptable casdata='pbo_loc_attr' incaslib='casuser' quiet;
       droptable casdata='pbo_location' incaslib='casuser' quiet;
       droptable casdata='PBO_LOC_HIERARCHY' incaslib='casuser' quiet;
       droptable casdata='PBO_LOC_ATTRIBUTES' incaslib='casuser' quiet;
       droptable casdata='pbo_hier_flat' incaslib='casuser' quiet;
       droptable casdata='attr_transposed' incaslib='casuser' quiet;
-    run;
+    quit;
 
 %mend price_load_data;
+
+%price_load_data;
